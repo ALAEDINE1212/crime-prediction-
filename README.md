@@ -1,6 +1,6 @@
 # crime-prediction-
 Crime Prediction Using Machine Learning (West Yorkshire)
-📌 Project Overview
+ Project Overview
 
 This repository contains the group project work for the Discipline-Specific Artificial Intelligence Project (COS-5031-E) at the University of Bradford.
 
@@ -8,7 +8,7 @@ The project focuses on building a machine learning prototype that analyses West 
 
 The solution is developed as part of a simulated 9-month internship at Future AI for ALL (FALL), where team members take on professional roles such as Associate AI Engineer, Scrum Master, and Product Owner.
 
-🎯 Project Objectives
+ Project Objectives
 
 Analyse large-scale real-world crime data (1M+ records)
 
@@ -31,8 +31,8 @@ Follow Agile project management with documented risks, planning, and sprints
 Ensure ethical and responsible AI considerations
 
 
-📄 Key Documents Explained
-📘 DSP Project 1 – Crime Prediction
+ Key Documents Explained
+DSP Project 1 – Crime Prediction
 
 Research background
 
@@ -48,7 +48,7 @@ Crime heatmaps and visualisations
 
 Initial findings and insights
 
-📙 Project Charter
+ Project Charter
 
 Business case
 
@@ -64,7 +64,7 @@ Constraints and assumptions
 
 Success criteria and OKRs
 
-📊 Risk Assessment
+📊Risk Assessment
 
 Identified project risks (data quality, ethics, scope creep, resources)
 
