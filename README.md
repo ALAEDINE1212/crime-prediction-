@@ -30,26 +30,6 @@ Follow Agile project management with documented risks, planning, and sprints
 
 Ensure ethical and responsible AI considerations
 
-📂 Repository Structure
-crime-prediction/
-│
-├── dataSet/
-│   ├── Raw and cleaned crime datasets
-│   └── Pre-processed CSV files used for modelling
-│
-├── meetings/
-│   ├── Meeting notes
-│   ├── Supervisor feedback
-│   └── Sprint discussions & decisions
-│
-├── PIF/   (Project Initiation Files)
-│   ├── DSP Project 1 – Crime Prediction.docx
-│   ├── Project Charter.docx
-│   ├── Risk Assessment.xlsx
-│   ├── WBS (Work Breakdown Structure).xlsx
-│   └── Research split & supporting visuals
-│
-└── README.md
 
 📄 Key Documents Explained
 📘 DSP Project 1 – Crime Prediction
