@@ -169,6 +169,7 @@ body{
   color: var(--muted);
   margin-bottom: 10px;
 }
+
 .badgeRow{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
 .badge{
   font-size: 12px;
@@ -182,8 +183,52 @@ body{
 .badge.warn{outline: 1px solid rgba(255,209,102,.35); color: var(--warn);}
 .badge.purple{outline: 1px solid rgba(184,146,255,.35); color: var(--purple);}
 
+.section{
+  margin-top: 10px;
+  border-top: 1px dashed rgba(255,255,255,0.08);
+  padding-top: 10px;
+}
+.sectionTitle{
+  font-size: 12px;
+  letter-spacing: .3px;
+  color: var(--muted);
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.sectionText{
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.kv{
+  display:grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 10px;
+  margin-top: 8px;
+}
+.kv .k{
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 12px;
+}
+.kv .v{
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 ul{margin: 10px 0 0 18px;}
 li{margin: 6px 0; color: var(--text);}
+
+.codeInline{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  background: rgba(0,0,0,0.28);
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
 
 .empty{
   height: 100%;
