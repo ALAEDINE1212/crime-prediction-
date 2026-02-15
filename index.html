@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crime Prediction — Pipeline & ERD</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- vis-network (CDN) -->
+  <script defer src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">CP</div>
+      <div>
+        <div class="title">Crime Prediction Project</div>
+        <div class="subtitle">Interactive Pipeline + Relational ERD (click nodes for details)</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="tabs">
+        <button id="tab-pipeline" class="tab active" type="button">Pipeline</button>
+        <button id="tab-erd" class="tab" type="button">ERD</button>
+      </div>
+
+      <div class="search">
+        <input id="searchInput" type="text" placeholder="Search node (e.g., prep, dim_cell)..." />
+        <button id="searchBtn" type="button">Find</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="canvas">
+      <div class="canvasHeader">
+        <div id="graphTitle" class="graphTitle">Pipeline Diagram</div>
+        <div class="hint">Tip: click a node → details panel. Drag/zoom the graph.</div>
+      </div>
+      <div id="network" class="network"></div>
+    </section>
+
+    <aside class="details">
+      <div class="detailsHeader">
+        <div class="detailsTitle">Node details</div>
+        <button id="resetDetails" class="ghost" type="button">Reset</button>
+      </div>
+
+      <div id="detailsBody" class="detailsBody">
+        <div class="empty">
+          <div class="emptyIcon">⧉</div>
+          <div class="emptyText">
+            Click a node on the left.<br />
+            This panel will show what’s inside it.
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>Static site — no backend. Use this for report evidence and demos.</span>
+  </footer>
+</body>
+</html>
