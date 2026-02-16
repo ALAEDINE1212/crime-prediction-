@@ -1,208 +1,193 @@
-# crime-prediction-
-Crime Prediction Using Machine Learning (West Yorkshire)
- Project Overview
+# Crime Hotspot Prediction + Interactive Map (West Yorkshire)
 
-This repository contains the group project work for the Discipline-Specific Artificial Intelligence Project (COS-5031-E) at the University of Bradford.
+This repo contains:
+1) a spatio-temporal crime hotspot pipeline (grid aggregation + forecasting),
+2) a deployed FastAPI API (Render),
+3) a deployed Leaflet web map UI (Netlify).
 
-The project focuses on building a machine learning prototype that analyses West Yorkshire crime data (2018 – January 2024) to identify patterns, correlations, and crime hotspots, and to predict where and when crimes are most likely to occur.
+It works end-to-end: the UI loads forecast months from the API and displays predicted hotspots on a real map.
 
-The solution is developed as part of a simulated 9-month internship at Future AI for ALL (FALL), where team members take on professional roles such as Associate AI Engineer, Scrum Master, and Product Owner.
+---
 
- Project Objectives
+## Live links
 
-Analyse large-scale real-world crime data (1M+ records)
+- **Frontend (Netlify):** https://ourworkflow.netlify.app/crime-map/
+- **Backend (Render API):** https://crime-prediction-apii.onrender.com
+- **API docs (Swagger):** https://crime-prediction-apii.onrender.com/docs
 
-Identify relationships between:
+Quick API check:
+- https://crime-prediction-apii.onrender.com/months
 
-Crime type
+---
 
-Location
+## What the system does (short + accurate)
 
-Time (month/year)
+### Data → Features
+- Uses UK Police street-level crime CSVs (monthly files).
+- Maps incidents into a fixed spatial grid (cell_id).
+- Aggregates into **cell × month** counts.
+- Builds features: **lags**, **rolling windows**, and **neighbour features**.
 
-Crime outcomes
+### Model → Hotspots
+- Predicts next-month crime counts per cell (baseline + Ridge regression).
+- Converts predictions into “hotspots” by selecting top ranked cells (top %).
 
-Build a predictive machine learning model
+### Web map
+- User selects a forecast month.
+- UI requests hotspots for the visible map area (bbox).
+- UI draws predicted hotspot points and supports click-based prediction.
 
-Produce visual insights such as crime heatmaps
+---
 
-Follow Agile project management with documented risks, planning, and sprints
+## Repo layout (the parts that matter)
 
-Ensure ethical and responsible AI considerations
+crime-map/ # Netlify static frontend (Leaflet map)
+index.html
+styles.css
+app.js
 
+crime_map_app/ # Render backend (FastAPI)
+backend/app.py
+requirements.txt
+runtime.txt
+data/processed/ # required by the API on Render
+cell_month_features.parquet
+dim_cell.parquet
 
- Key Documents Explained
-DSP Project 1 – Crime Prediction
+src/ # pipeline + evaluation scripts
+make_dataset.py
+walk_forward.py
+visualize_month.py
+make_results_table.py
 
-Research background
 
-Dataset description
 
-Data cleaning and preprocessing
+---
 
-Exploratory Data Analysis (EDA)
+## Run locally
 
-Correlation analysis
+### 1) Create venv + install backend requirements
+From repo root:
 
-Crime heatmaps and visualisations
+```bash
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+# source .venv/bin/activate
 
-Initial findings and insights
+pip install -r crime_map_app/requirements.txt
 
- Project Charter
 
-Business case
+2) Run backend (FastAPI)
 
-SMART goals
+From repo root:
 
-Scope (in-scope / out-of-scope)
+python -m uvicorn crime_map_app.backend.app:app --reload --port 8000
 
-Budget estimation
 
-Stakeholders
+Test:
 
-Constraints and assumptions
+http://127.0.0.1:8000/
 
-Success criteria and OKRs
+http://127.0.0.1:8000/docs
 
-📊Risk Assessment
+http://127.0.0.1:8000/months
 
-Identified project risks (data quality, ethics, scope creep, resources)
+3) Run frontend (Leaflet)
 
-Risk likelihood and impact
+Serve the crime-map/ folder:
 
-Mitigation strategies
+cd crime-map
+python -m http.server 5500
 
-Agile risk monitoring
 
-🧱 Work Breakdown Structure (WBS)
+Open:
 
-Breakdown of project phases
+http://127.0.0.1:5500/
 
-Tasks and deliverables
+Important: crime-map/app.js must point to the correct API:
 
-Alignment with Agile sprints
+local: http://127.0.0.1:8000
 
-🔄 Agile Methodology
+deployed: https://crime-prediction-apii.onrender.com
 
-The project follows an Agile Scrum framework, including:
+Core API endpoints
 
-Sprint planning
+GET /
+Health/status.
 
-Iterative development
+GET /months
+Returns available forecast months (only months with enough history).
 
-Regular client and supervisor feedback
+GET /predict?forecast_month=YYYY-MM&top_pct=0.05&bbox=lat1,lon1,lat2,lon2
+Returns hotspots in the current viewport.
 
-Continuous documentation
+GET /predict_point?forecast_month=YYYY-MM&lat=...&lon=...
+Returns a prediction at a clicked location.
 
-Group and individual blog reflections
+(Exact behaviour is implemented in crime_map_app/backend/app.py.)
 
-👥 Team Roles & Responsibilities
-🟦 Product Owner
+Pipeline scripts (dataset + evaluation)
+Build processed features
 
-Responsible for:
+Requires local raw CSVs under data/raw/ (not included in repo).
 
-Defining project vision and objectives
+python src/make_dataset.py
 
-Aligning work with the client’s problem statement
 
-Prioritising features and deliverables
+Outputs:
 
-Ensuring business and academic value
+data/processed/cell_month_features.parquet
 
-Acting as the main liaison with the client
+data/processed/dim_cell.parquet
 
-In this project:
+Walk-forward validation
 
-Owns the problem definition and success criteria
+Examples:
 
-Ensures the prototype meets the agreed scope
+python src/walk_forward.py --model baseline_lag1 --outfile data/processed/wf_baseline_lag1.csv
+python src/walk_forward.py --model ridge --outfile data/processed/wf_ridge.csv
 
-Reviews outputs against project goals
+Visualise a month
+python src/visualize_month.py --month 2025-10 --k 200 --outdir outputs/
 
-🟩 Scrum Master
+Deployment notes (what was actually needed)
+Backend (Render)
 
-Responsible for:
+Root directory set to: crime_map_app
 
-Facilitating Agile ceremonies (planning, reviews)
+Start command:
 
-Removing blockers
+uvicorn backend.app:app --host 0.0.0.0 --port $PORT
 
-Ensuring Scrum principles are followed
 
-Supporting team coordination and communication
+The backend requires these files deployed on Render:
 
-Monitoring sprint progress and risks
+crime_map_app/data/processed/cell_month_features.parquet
 
-In this project:
+crime_map_app/data/processed/dim_cell.parquet
 
-Manages sprint plans and timelines
+Frontend (Netlify)
 
-Coordinates meetings and documentation
+Static site hosting.
 
-Tracks risks and dependencies
+UI lives under /crime-map/.
 
-Ensures fair task distribution and collaboration
+API_BASE in crime-map/app.js points to Render.
 
-🟨 Development Team (Associate AI Engineers)
+CORS (must exist or browser blocks it)
 
-Responsible for:
+Backend must allow:
 
-Data cleaning and preprocessing
+https://ourworkflow.netlify.app
 
-Feature engineering
+Known limitations (don’t pretend it’s perfect)
 
-Model development and evaluation
+Open crime data includes reporting bias and missingness.
 
-Visualisation and interpretation of results
+Hotspot prediction is a risk signal, not certainty.
 
-Documentation and reporting
+Grid size and hotspot threshold strongly affect results and visuals.
 
-🧠 Technologies & Tools
-
-Python (Pandas, NumPy, Scikit-learn, Matplotlib, Seaborn)
-
-Jupyter Notebook / VS Code
-
-Microsoft Excel (Risk Log, WBS)
-
-GitHub (Version control & collaboration)
-
-Google Colab (Model experimentation)
-
-Agile tools (Sprint planning & documentation)
-
-⚖️ Ethical & Responsible AI
-
-The project considers:
-
-Bias in historical crime data
-
-Fairness and transparency
-
-Data privacy and responsible use
-
-Avoiding misleading predictions
-
-Ethical limitations of predictive policing models
-
-An ethical toolkit and FAIR AI report are included as part of the coursework requirements.
-
-📅 Key Dates
-
-Element 1 (Research & Design): 16 Jan 2026
-
-Group Submission: 3 April 2026
-
-Live Demo & Presentation: 6 April 2026
-
-Final Individual Reflection: April 2026
-
-📜 Academic Context
-
-Module: COS-5031-E – Discipline-Specific Artificial Intelligence Project
-
-Institution: University of Bradford
-
-Client: Dr Irfan Mehmood
-
-Module Leader: Dr Kulvinder Panesar
+This is a forecasting + ranking system, not “crime prediction of individuals”.
