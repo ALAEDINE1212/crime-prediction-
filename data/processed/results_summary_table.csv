@@ -1,0 +1,3 @@
+Row label,Model in file,Months,MAE (mean±std),RMSE (mean±std),Precision@K (mean±std),Source
+Baseline (lag-1),baseline_lag1,11,3.746 ± 0.106,5.856 ± 0.224,0.663 ± 0.035,wf_baseline_lag1.csv
+Ridge (lags+rolling),ridge,11,2.944 ± 0.085,4.531 ± 0.251,0.734 ± 0.015,wf_ridge.csv
