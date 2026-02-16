@@ -69,6 +69,10 @@ make_results_table.py
 ### 1) Create venv + install backend requirements
 From repo root:
 
+## 1) Create venv + install backend requirements
+
+From repo root:
+
 ```bash
 python -m venv .venv
 # Windows:
@@ -77,13 +81,12 @@ python -m venv .venv
 # source .venv/bin/activate
 
 pip install -r crime_map_app/requirements.txt
----
+```
  2) Run backend (FastAPI)
-
 From repo root:
-
+```
 python -m uvicorn crime_map_app.backend.app:app --reload --port 8000
-
+```
 
 Test:
 
@@ -96,10 +99,10 @@ http://127.0.0.1:8000/months
 3) Run frontend (Leaflet)
 
 Serve the crime-map/ folder:
-
+```
 cd crime-map
 python -m http.server 5500
-
+```
 
 Open:
 
