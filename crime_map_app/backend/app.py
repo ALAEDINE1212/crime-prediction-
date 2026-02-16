@@ -38,14 +38,15 @@ app = FastAPI(title="Crime Hotspot Prediction API", version="1.1")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://ourworkflow.netlify.app",
         "http://127.0.0.1:5500",
         "http://localhost:5500",
-        "https://YOUR-NETLIFY-SITE.netlify.app",
     ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 def _ensure_period_month(df: pd.DataFrame) -> pd.DataFrame:
