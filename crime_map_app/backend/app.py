@@ -12,7 +12,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
 from sklearn.neighbors import NearestNeighbors
-
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
 # ----------------------------
@@ -33,6 +34,18 @@ FEATURE_CANDIDATES = [
 ]
 
 app = FastAPI(title="Crime Hotspot Prediction API", version="1.1")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # TEMP TEST
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def root():
+    return {"status": "ok"}
 
 # ✅ Fix CORS: allow frontend on 5500
 app.add_middleware(
