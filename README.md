@@ -183,7 +183,6 @@ Backend must allow:
 
 https://ourworkflow.netlify.app
 
-Known limitations (don’t pretend it’s perfect)
 
 Open crime data includes reporting bias and missingness.
 
