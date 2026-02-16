@@ -77,9 +77,8 @@ python -m venv .venv
 # source .venv/bin/activate
 
 pip install -r crime_map_app/requirements.txt
-
-
-2) Run backend (FastAPI)
+---
+ 2) Run backend (FastAPI)
 
 From repo root:
 
@@ -143,7 +142,6 @@ data/processed/cell_month_features.parquet
 data/processed/dim_cell.parquet
 
 Walk-forward validation
-
 Examples:
 
 python src/walk_forward.py --model baseline_lag1 --outfile data/processed/wf_baseline_lag1.csv
