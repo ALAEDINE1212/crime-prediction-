@@ -1,5 +1,5 @@
 ﻿from __future__ import annotations
-
+from pathlib import Path
 from functools import lru_cache
 from typing import Optional, Dict, Any, Tuple, List
 
@@ -12,6 +12,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
 from sklearn.neighbors import NearestNeighbors
+
 
 
 # ----------------------------
@@ -197,6 +198,23 @@ def months():
         "note": "Only months with enough history are returned."
     }
 
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+@app.get("/debug/files")
+def debug_files():
+    return {
+        "cwd": str(Path.cwd()),
+        "features_exists": Path("data/processed/cell_month_features.parquet").exists(),
+        "dim_exists": Path("data/processed/dim_cell.parquet").exists(),
+        "tree_data_processed": [p.name for p in Path("data/processed").glob("*")],
+    }
+
+@app.get("/months")
+def months():
+    df, _ = load_data()
+    return {"forecast_months": available_forecast_months(df)}
 
 @app.get("/predict")
 def predict(
