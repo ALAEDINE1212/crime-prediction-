@@ -3,57 +3,70 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Crime Prediction Project - Pipeline + ERD</title>
+  <title>Crime Prediction Project — Diagrams</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
+  <!-- Cytoscape + Dagre layout -->
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 </head>
+
 <body>
   <header class="topbar">
     <div class="brand">
       <div class="logo">CP</div>
-      <div>
+      <div class="brand-text">
         <div class="title">Crime Prediction Project</div>
-        <div class="subtitle">Interactive Pipeline + ERD (click nodes for clear explanations)</div>
+        <div class="subtitle">Interactive diagrams (drag nodes, click for details). Positions persist.</div>
       </div>
     </div>
 
     <div class="controls">
-      <div class="tabs" role="tablist" aria-label="View">
-        <button id="tabPipeline" class="tab active" role="tab" aria-selected="true">Pipeline</button>
-        <button id="tabERD" class="tab" role="tab" aria-selected="false">ERD</button>
+      <div class="tabs" role="tablist" aria-label="Diagram tabs">
+        <button class="tab active" data-mode="pipeline" role="tab">Pipeline</button>
+        <button class="tab" data-mode="erd" role="tab">ERD</button>
+        <button class="tab" data-mode="website" role="tab">Website</button>
       </div>
 
       <div class="search">
-        <input id="searchInput" type="text" placeholder="Search node (e.g., preprocessing, dim_cell)..." />
-        <button id="btnFind" class="btn">Find</button>
+        <input id="searchInput" type="text" placeholder="Search node (e.g., make_dataset, dim_cell)..." />
+        <button id="searchBtn">Find</button>
       </div>
     </div>
   </header>
 
   <main class="layout">
-    <section class="card left">
-      <div class="cardHeader">
-        <div class="cardTitle" id="graphTitle">Pipeline Diagram</div>
-        <div class="hint">Click node → details. Drag/zoom the graph.</div>
+    <section class="panel left">
+      <div class="panel-header">
+        <div id="panelTitle" class="panel-title">Pipeline Diagram</div>
+        <div class="panel-hint">Drag/zoom the graph. Click node → details. </div>
       </div>
-      <div id="graphHost" class="graphHost"></div>
+
+      <div id="cy" class="graph"></div>
     </section>
 
-    <aside class="card right">
-      <div class="cardHeader">
-        <div class="cardTitle">Node details</div>
-        <button id="btnReset" class="btn subtle">Reset</button>
+    <aside class="panel right">
+      <div class="panel-header right-header">
+        <div class="panel-title">Node details</div>
+        <div class="right-actions">
+          <button id="resetBtn" class="btn ghost">Reset layout</button>
+        </div>
       </div>
 
       <div id="details" class="details">
-        <div class="detailsEmpty">
-          <div class="emptyIcon"></div>
-          <div class="emptyTitle">Click a node on the left.</div>
-          <div class="emptyText">This panel explains what it is and how it connects.</div>
+        <div class="details-empty">
+          <div class="icon">⧉</div>
+          <div class="empty-title">Select a node</div>
+          <div class="empty-text">This panel explains what it is and how it connects.</div>
         </div>
       </div>
     </aside>
   </main>
+
+  <footer class="footer">
+    <div>Tip: keep node labels short. Long explanations belong in the right panel.</div>
+  </footer>
 
   <script src="app.js"></script>
 </body>
