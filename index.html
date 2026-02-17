@@ -4,70 +4,67 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Crime Prediction Project — Diagrams</title>
-  <link rel="stylesheet" href="styles.css" />
 
-  <!-- Cytoscape + Dagre layout -->
-  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
-  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
-  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
   <header class="topbar">
     <div class="brand">
       <div class="logo">CP</div>
-      <div class="brand-text">
+      <div class="brandText">
         <div class="title">Crime Prediction Project</div>
-        <div class="subtitle">Interactive diagrams (drag nodes, click for details). Positions persist.</div>
+        <div class="subtitle">Interactive Pipeline + ERD + Website Architecture (drag nodes, click for details)</div>
       </div>
     </div>
 
     <div class="controls">
-      <div class="tabs" role="tablist" aria-label="Diagram tabs">
-        <button class="tab active" data-mode="pipeline" role="tab">Pipeline</button>
-        <button class="tab" data-mode="erd" role="tab">ERD</button>
-        <button class="tab" data-mode="website" role="tab">Website</button>
+      <div class="tabs" role="tablist" aria-label="Diagrams">
+        <button class="tab active" data-diagram="pipeline" role="tab" aria-selected="true">Pipeline</button>
+        <button class="tab" data-diagram="erd" role="tab" aria-selected="false">ERD</button>
+        <button class="tab" data-diagram="web" role="tab" aria-selected="false">Website</button>
       </div>
 
       <div class="search">
-        <input id="searchInput" type="text" placeholder="Search node (e.g., make_dataset, dim_cell)..." />
+        <input id="searchInput" type="text" placeholder="Search node (e.g., prep, dim_cell, api)..." />
         <button id="searchBtn">Find</button>
       </div>
     </div>
   </header>
 
   <main class="layout">
-    <section class="panel left">
-      <div class="panel-header">
-        <div id="panelTitle" class="panel-title">Pipeline Diagram</div>
-        <div class="panel-hint">Drag/zoom the graph. Click node → details. </div>
+    <section class="panel graphPanel">
+      <div class="panelHeader">
+        <div class="panelTitle" id="panelTitle">Pipeline Diagram</div>
+        <div class="panelHint">Click node → details. Drag/zoom the graph.</div>
       </div>
-
-      <div id="cy" class="graph"></div>
+      <div id="cy" class="cy"></div>
     </section>
 
-    <aside class="panel right">
-      <div class="panel-header right-header">
-        <div class="panel-title">Node details</div>
-        <div class="right-actions">
-          <button id="resetBtn" class="btn ghost">Reset layout</button>
-        </div>
+    <aside class="panel detailsPanel">
+      <div class="panelHeader">
+        <div class="panelTitle">Node details</div>
+        <button id="resetBtn" class="btn">Reset</button>
       </div>
 
-      <div id="details" class="details">
-        <div class="details-empty">
-          <div class="icon">⧉</div>
-          <div class="empty-title">Select a node</div>
-          <div class="empty-text">This panel explains what it is and how it connects.</div>
-        </div>
+      <div id="details" class="detailsEmpty">
+        <div class="emptyIcon">▣</div>
+        <div class="emptyTitle">Click a node on the left.</div>
+        <div class="emptySub">This panel explains what it is and how it connects.</div>
       </div>
     </aside>
   </main>
 
-  <footer class="footer">
-    <div>Tip: keep node labels short. Long explanations belong in the right panel.</div>
-  </footer>
+  <!-- Cytoscape + layout -->
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
