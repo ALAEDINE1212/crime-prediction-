@@ -1,23 +1,33 @@
 /* global cytoscape */
 
-const API_BASE_DEFAULT = "https://crime-prediction-apii.onrender.com"; // your Render API
-const LS_KEY_PREFIX = "cp_positions_v2_";
-
+const LS_KEY_PREFIX = "cp_diagram_positions_";
 const DIAGRAM_META = {
-  pipeline: { title: "Pipeline Diagram" },
-  erd:      { title: "ERD Diagram" },
-  web:      { title: "Website Architecture Diagram" },
+  pipeline: { title: "Pipeline Diagram", layout: { name: "dagre", rankDir: "TB", rankSep: 90, nodeSep: 40, edgeSep: 12, padding: 60 } },
+  erd:      { title: "ERD Diagram",      layout: { name: "dagre", rankDir: "LR", rankSep: 110, nodeSep: 55, edgeSep: 12, padding: 70 } },
+  web:      { title: "Website Architecture Diagram", layout: { name: "dagre", rankDir: "LR", rankSep: 120, nodeSep: 50, edgeSep: 18, padding: 70 } },
 };
 
-/**
- * READABILITY FIXES:
- * - Inter font everywhere
- * - Bigger font, bold
- * - Wrap text
- * - Nodes auto-size to label with padding
- * - Text outline + background so labels are readable on any node color
- * - Per-class overrides for light nodes (black text) and dark nodes (white text)
- */
+const cyContainer = document.getElementById("cy");
+const panelTitle  = document.getElementById("panelTitle");
+const detailsEl   = document.getElementById("details");
+const fitBtn      = document.getElementById("fitBtn");
+const resetLayoutBtn = document.getElementById("resetLayoutBtn");
+const resetPosBtn = document.getElementById("resetPosBtn");
+const tabs = Array.from(document.querySelectorAll(".tab"));
+const searchInput = document.getElementById("searchInput");
+const searchBtn = document.getElementById("searchBtn");
+
+let cy = null;
+let currentDiagram = "pipeline";
+
+/* -------------------- STYLE (ONLY READABILITY + “TEXT INSIDE BOX”) -------------------- */
+/*
+  You said: don’t mess with colors/layout/meaning.
+  So this style:
+  - keeps node colors by class
+  - only fixes label contrast + size + wrapping
+  - ensures text doesn’t float outside: fixed width/height + wrap
+*/
 const CY_STYLE = [
   {
     selector: "node",
@@ -26,155 +36,67 @@ const CY_STYLE = [
       "label": "data(label)",
       "text-valign": "center",
       "text-halign": "center",
-
-      // Font + readability
-      "font-family": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-      "font-size": 14,
-      "font-weight": 800,
-
-      // Make nodes fit labels so text never sits outside
-      "width": "label",
-      "height": "label",
-      "padding": "12px",
-
-      // Wrap long labels
       "text-wrap": "wrap",
-      "text-max-width": 150,
+      "text-max-width": "data(textMaxW)",
 
-      // Default text for darker nodes
-      "color": "#f8fafc",
+      "width": "data(w)",
+      "height": "data(h)",
 
-      // Outline makes text readable regardless of fill
-      "text-outline-width": 3,
-      "text-outline-color": "rgba(0,0,0,0.72)",
+      "font-family": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      "font-size": "data(fs)",
+      "font-weight": 900,
 
-      // Optional subtle label background (helps on busy tiles)
-      "text-background-opacity": 0.85,
-      "text-background-color": "rgba(2,6,23,0.65)",
+      // Default readable label treatment on dark UI
+      "color": "#0b1220",                       // black text by default (you asked that earlier for pipeline)
+      "text-outline-width": 2.5,
+      "text-outline-color": "rgba(255,255,255,0.92)",
+      "text-background-opacity": 0.92,
+      "text-background-color": "rgba(255,255,255,0.78)",
       "text-background-padding": "3px",
       "text-background-shape": "round-rectangle",
 
-      // Node visuals
-      "background-color": "rgba(148,163,184,0.14)",
-      "border-width": 1.5,
-      "border-color": "rgba(148,163,184,0.28)",
-      "overlay-padding": 8,
+      "border-width": 1.6,
+      "border-color": "rgba(148,163,184,0.35)",
       "overlay-opacity": 0,
     }
   },
 
-  // Light nodes: black text + white outline (so it stays readable on light fills)
-  {
-    selector: "node.light",
-    style: {
-      "color": "#0b1220",
-      "text-outline-color": "rgba(255,255,255,0.92)",
-      "text-background-color": "rgba(255,255,255,0.78)",
-      "text-background-opacity": 0.95
-    }
-  },
+  /* Pipeline colors (same idea as your screenshot: blue datasets, yellow steps, grey models, green eval, purple outputs) */
+  { selector: "node.dataset", style: { "background-color": "#8fb7ff", "border-color": "rgba(143,183,255,0.95)" } },
+  { selector: "node.step",    style: { "background-color": "#f6c85f", "border-color": "rgba(246,200,95,0.95)" } },
+  { selector: "node.model",   style: { "background-color": "#cfd6e6", "border-color": "rgba(207,214,230,0.95)" } },
+  { selector: "node.eval",    style: { "background-color": "#42d9a7", "border-color": "rgba(66,217,167,0.95)" } },
+  { selector: "node.output",  style: { "background-color": "#b487ff", "border-color": "rgba(180,135,255,0.95)" } },
 
-  // Pipeline group colors
-  {
-    selector: "node.dataset",
-    style: {
-      "background-color": "rgba(122,162,255,0.22)",
-      "border-color": "rgba(122,162,255,0.55)",
-      "text-background-color": "rgba(2,6,23,0.60)"
-    }
-  },
-  {
-    selector: "node.process",
-    style: {
-      "background-color": "rgba(255,201,77,0.20)",
-      "border-color": "rgba(255,201,77,0.55)",
+  /* ERD table look (light card) */
+  { selector: "node.table",   style: { "background-color": "#ffffff", "border-color": "rgba(148,163,184,0.85)" } },
 
-      // Yellow is light -> force readable black text
-      "color": "#0b1220",
-      "text-outline-color": "rgba(255,255,255,0.92)",
-      "text-background-color": "rgba(255,255,255,0.78)",
-      "text-background-opacity": 0.95
-    }
-  },
-  {
-    selector: "node.model",
-    style: {
-      "background-color": "rgba(148,163,184,0.18)",
-      "border-color": "rgba(148,163,184,0.45)"
-    }
-  },
-  {
-    selector: "node.eval",
-    style: {
-      "background-color": "rgba(60,234,180,0.18)",
-      "border-color": "rgba(60,234,180,0.50)",
-      "color": "#0b1220",
-      "text-outline-color": "rgba(255,255,255,0.92)",
-      "text-background-color": "rgba(255,255,255,0.78)",
-      "text-background-opacity": 0.95
-    }
-  },
-  {
-    selector: "node.gov",
-    style: {
-      "background-color": "rgba(60,234,180,0.16)",
-      "border-color": "rgba(60,234,180,0.40)",
-      "color": "#0b1220",
-      "text-outline-color": "rgba(255,255,255,0.92)",
-      "text-background-color": "rgba(255,255,255,0.78)",
-      "text-background-opacity": 0.95
-    }
-  },
-  {
-    selector: "node.output",
-    style: {
-      "background-color": "rgba(170,120,255,0.20)",
-      "border-color": "rgba(170,120,255,0.50)"
-    }
-  },
+  /* Website diagram nodes (keep simple modern palette similar to what you showed: white/blue/teal) */
+  { selector: "node.web-white", style: { "background-color": "#ffffff", "border-color": "rgba(148,163,184,0.85)" } },
+  { selector: "node.web-blue",  style: { "background-color": "#7aa2ff", "border-color": "rgba(122,162,255,0.95)" } },
+  { selector: "node.web-teal",  style: { "background-color": "#2ee6c2", "border-color": "rgba(46,230,194,0.95)" } },
 
-  // ERD styling
-  {
-    selector: "node.erdTable",
-    style: {
-      "background-color": "rgba(226,232,240,0.92)",
-      "border-color": "rgba(148,163,184,0.60)",
-      "color": "#0b1220",
-      "text-outline-color": "rgba(255,255,255,0.95)",
-      "text-background-color": "rgba(255,255,255,0.85)",
-      "text-background-opacity": 0.95,
-      "text-max-width": 190
-    }
-  },
-
-  // Web diagram styling
-  {
-    selector: "node.webNode",
-    style: {
-      "text-max-width": 170
-    }
-  },
-
-  // Edges
+  /* Edges */
   {
     selector: "edge",
     style: {
       "curve-style": "bezier",
       "width": 2,
-      "line-color": "rgba(148,163,184,0.40)",
+      "line-color": "rgba(148,163,184,0.45)",
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "rgba(148,163,184,0.50)",
+      "target-arrow-color": "rgba(148,163,184,0.55)",
       "arrow-scale": 0.9,
 
-      // Edge labels readable too
       "label": "data(label)",
       "font-family": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
       "font-size": 12,
-      "font-weight": 800,
-      "color": "#f8fafc",
+      "font-weight": 900,
+
+      // readable edge labels
+      "color": "#e8eefc",
       "text-outline-width": 3,
-      "text-outline-color": "rgba(0,0,0,0.75)",
-      "text-background-opacity": 0.85,
+      "text-outline-color": "rgba(0,0,0,0.70)",
+      "text-background-opacity": 0.88,
       "text-background-color": "rgba(2,6,23,0.70)",
       "text-background-padding": "3px",
       "text-background-shape": "round-rectangle",
@@ -182,357 +104,405 @@ const CY_STYLE = [
     }
   },
 
-  // Highlight
+  /* click highlight */
   {
-    selector: ".highlight",
+    selector: ".selected",
     style: {
       "border-width": 3,
       "border-color": "rgba(122,162,255,0.95)",
-      "background-color": "rgba(122,162,255,0.28)"
+      "line-color": "rgba(122,162,255,0.65)",
+      "target-arrow-color": "rgba(122,162,255,0.75)"
     }
   }
 ];
 
-function elNode(id, label, classes, details) {
+/* -------------------- ELEMENT HELPERS -------------------- */
+function node(id, label, classes, details, sizing = {}) {
+  const {
+    w = 220, h = 84, fs = 14, textMaxW = 190
+  } = sizing;
   return {
-    data: { id, label, details },
+    data: { id, label, details, w, h, fs, textMaxW },
     classes
   };
 }
 
-function elEdge(id, source, target, label = "") {
-  return {
-    data: { id, source, target, label }
-  };
+function edge(id, source, target, label = "") {
+  return { data: { id, source, target, label } };
 }
 
-/* -------------------- DIAGRAM DATA -------------------- */
-
-const PIPELINE_ELEMENTS = [
-  // Nodes
-  elNode(
-    "crime_data",
+/* -------------------- CONTENT (BASED ON WHAT YOU BUILT TONIGHT) -------------------- */
+/* Pipeline */
+const PIPELINE = [
+  node(
+    "crime_incident_data",
     "Crime Incident Data\nWest Yorkshire Police\n(monthly CSVs)",
     "dataset",
     {
-      subtitle: "Raw incident records used as the primary signal.",
+      subtitle: "Raw police records you stored in data/raw/YYYY-MM (street CSVs).",
+      chips: ["Input", "CSV"],
       bullets: [
-        "Inputs: location coordinates, month, crime type, outcomes (when available).",
-        "Main quality issues: missing/invalid coordinates and duplicates.",
-        "Used to build monthly grid-cell crime counts."
+        "You loaded 36 monthly files and validated columns + coordinates.",
+        "Records are aggregated into monthly counts per grid cell.",
+        "This is the main signal used for forecasting hotspots."
       ]
-    }
+    },
+    { w: 250, h: 92, fs: 14, textMaxW: 210 }
   ),
 
-  elNode(
-    "socio_data",
-    "Socio-Economic Indicators\nOpen Gov / ONS\n(planned)",
+  node(
+    "socio_economic",
+    "Socio-Economic Indicators\n(Open Gov / ONS)\n(planned)",
     "dataset",
     {
-      subtitle: "Contextual features that may explain spatial differences.",
+      subtitle: "Planned dataset you said you’ll add later (5 days). Not used yet.",
+      chips: ["Planned", "Context features"],
       bullets: [
-        "Examples: deprivation, unemployment, housing, education.",
-        "Joined by area (LSOA/MSOA) then mapped to grid cells.",
-        "Added as static or slowly-varying features per cell."
+        "Would be joined via geography (LSOA/MSOA → cells).",
+        "Could improve generalisation beyond pure crime history.",
+        "Until you integrate it, don’t pretend it’s part of the model."
       ]
-    }
+    },
+    { w: 250, h: 92, fs: 14, textMaxW: 210 }
   ),
 
-  elNode(
-    "prep",
-    "Data Pre-processing & Quality Gate\nclean + validate",
-    "process",
+  node(
+    "preprocess",
+    "Data Pre-processing\n& Quality Gate\nclean + validate",
+    "step",
     {
-      subtitle: "Cleaning steps applied before any modelling.",
+      subtitle: "Cleaning stage in make_dataset.py before grid aggregation.",
+      chips: ["make_dataset.py"],
       bullets: [
-        "Drop rows with invalid coordinates or “No Location”.",
-        "Standardise date/month fields and remove duplicates.",
-        "Basic sanity checks so downstream results aren’t garbage."
+        "Handled missing/invalid coordinates and dropped unusable rows.",
+        "Standardised month field and kept consistent schema across files.",
+        "This prevents garbage from poisoning features and evaluation."
       ]
     }
   ),
 
-  elNode(
-    "repr",
-    "Spatial & Temporal Representation\ngrid + monthly",
-    "process",
+  node(
+    "representation",
+    "Spatial & Temporal\nRepresentation\ngrid + monthly",
+    "step",
     {
-      subtitle: "Transforms raw points into a consistent spatio-temporal table.",
+      subtitle: "You assigned incidents to a meter-based grid and aggregated by month.",
+      chips: ["cell_x/cell_y", "cell_id"],
       bullets: [
-        "Project lat/lon → meters, then assign each record to a grid cell.",
-        "Aggregate to monthly counts per cell.",
-        "Creates stable IDs (cell_x, cell_y, cell_id)."
+        "Projected coordinates → grid indices (cell_x, cell_y).",
+        "Built stable cell_id and cell centers (dim_cell.parquet).",
+        "Produced monthly cell table used for modelling."
       ]
     }
   ),
 
-  elNode(
-    "fe",
-    "Feature Engineering\nlags + rolling\n+ neighbours",
-    "process",
+  node(
+    "feature_engineering",
+    "Feature Engineering\nlags + rolling\n(+ neighbours optional)",
+    "step",
     {
-      subtitle: "Adds history and neighbourhood context for forecasting.",
+      subtitle: "Created model features per cell-month (cell_month_features.parquet).",
+      chips: ["lags", "rolling", "neighbours"],
       bullets: [
-        "Lag features (e.g., t-1, t-2 …), rolling mean/sum.",
-        "Neighbour features (adjacent cells) to capture spillover.",
-        "Produces model-ready features per cell per month."
+        "Lag features (t-1 etc.) and rolling stats for trend/smoothing.",
+        "Neighbour features were added, but performance slightly worsened.",
+        "So you keep them optional, not forced."
       ]
     }
   ),
 
-  elNode(
-    "task",
-    "Prediction Task Definition\nforecast + hotspots",
-    "process",
+  node(
+    "task_definition",
+    "Prediction Task\nforecast + hotspots",
+    "step",
     {
-      subtitle: "Defines what the model predicts and how hotspots are selected.",
+      subtitle: "One-step-ahead forecasting per cell + choose top K% as hotspots.",
+      chips: ["Precision@K", "BBox filtering"],
       bullets: [
-        "One-step-ahead forecast of crime count for each cell.",
-        "Hotspots = top K% predicted cells per month.",
-        "Supports point query via nearest cell."
+        "Forecast next month count for each cell.",
+        "Rank cells → hotspot set = top K% (your UI uses top_pct).",
+        "Also support point query by nearest cell center."
       ]
     }
   ),
 
-  elNode(
-    "baseline",
-    "Baseline Models\nnaive + seasonal",
+  node(
+    "baselines",
+    "Baseline Models\nnaive lag-1 / seasonal",
     "model",
     {
-      subtitle: "Simple baselines to beat.",
+      subtitle: "Simple benchmarks you ran before ML.",
+      chips: ["baseline"],
       bullets: [
-        "Naive lag-1: y_hat(t) = y(t-1).",
-        "Seasonal lag-12: y_hat(t) = y(t-12).",
-        "Provides an interpretable benchmark."
+        "Lag-1 baseline and lag-12 seasonal baseline were evaluated.",
+        "Gives you a minimum standard to beat.",
+        "If your fancy model can’t beat this, it’s not worth deploying."
       ]
-    }
+    },
+    { w: 240, h: 80, fs: 14, textMaxW: 200 }
   ),
 
-  elNode(
+  node(
     "ridge",
     "ML Model\nRidge Regression\n(lags+rolling)",
     "model",
     {
-      subtitle: "Stronger baseline: linear model with regularisation.",
+      subtitle: "Your best working model tonight (better MAE/RMSE and Precision@K).",
+      chips: ["ridge", "walk-forward"],
       bullets: [
-        "Trains on engineered lag/rolling features.",
-        "Ridge helps prevent overfitting and stabilises coefficients.",
-        "Evaluated with walk-forward splits."
+        "Trained using walk-forward evaluation to avoid leakage.",
+        "Improved compared to baseline in your results.",
+        "Used to drive the deployed hotspot API."
       ]
-    }
+    },
+    { w: 240, h: 80, fs: 14, textMaxW: 200 }
   ),
 
-  elNode(
-    "eval",
-    "Evaluation & Validation\nwalk-forward",
+  node(
+    "evaluation",
+    "Evaluation & Validation\nwalk-forward + plots",
     "eval",
     {
-      subtitle: "Time-respecting testing (no leakage).",
+      subtitle: "You generated figures and CSV results for model comparison.",
+      chips: ["MAE", "RMSE", "Precision@K"],
       bullets: [
-        "Chronological walk-forward: train → predict next month → roll.",
-        "Regression metrics: MAE / RMSE.",
-        "Hotspot metrics: Precision@K / HitRate@K."
+        "Walk-forward results saved to CSV (wf_*.csv).",
+        "Visual evaluation saved under data/processed/figures.",
+        "You also computed file hashes for reproducibility."
       ]
     }
   ),
 
-  elNode(
-    "rai",
-    "Responsible AI & Governance",
-    "gov",
+  node(
+    "governance",
+    "Responsible AI\n& Governance",
+    "eval",
     {
-      subtitle: "Decision-support only; limitations clearly stated.",
+      subtitle: "Important: this is decision-support, not enforcement automation.",
+      chips: ["Ethics", "Limitations"],
       bullets: [
-        "Bias awareness: policing data reflects reporting and enforcement.",
-        "Transparency: document assumptions, errors, and uncertainty.",
-        "Avoid using outputs for punitive decisions."
+        "Policing data contains reporting/enforcement bias.",
+        "Outputs should be presented with uncertainty and caveats.",
+        "Must not be used to justify discriminatory targeting."
       ]
-    }
+    },
+    { w: 230, h: 74, fs: 14, textMaxW: 190 }
   ),
 
-  elNode(
+  node(
     "outputs",
-    "Decision-Support Outputs\nmaps + ranked cells",
+    "Decision-Support Outputs\nhotspot map + point query",
     "output",
     {
-      subtitle: "Outputs designed for interpretation, not blind automation.",
+      subtitle: "You built a real map UI: choose month, top%, bbox, click for point prediction.",
+      chips: ["Leaflet", "API"],
       bullets: [
-        "Hotspot map: top predicted cells for a chosen month.",
-        "Point query: nearest cell forecast at clicked location.",
-        "Tables: month-by-month error + hotspot precision."
+        "Frontend renders hotspots (top K%) as markers.",
+        "Click on map calls /predict_point for nearest cell forecast.",
+        "This matches what your supervisor expects: interpretable outputs."
       ]
-    }
+    },
+    { w: 260, h: 86, fs: 14, textMaxW: 220 }
   ),
 
-  // Edges
-  elEdge("p1","crime_data","prep"),
-  elEdge("p2","socio_data","prep"),
-  elEdge("p3","prep","repr"),
-  elEdge("p4","repr","fe"),
-  elEdge("p5","fe","task"),
-  elEdge("p6","task","baseline"),
-  elEdge("p7","task","ridge"),
-  elEdge("p8","baseline","eval"),
-  elEdge("p9","ridge","eval"),
-  elEdge("p10","eval","rai"),
-  elEdge("p11","rai","outputs"),
+  edge("p1","crime_incident_data","preprocess"),
+  edge("p2","socio_economic","preprocess"),
+  edge("p3","preprocess","representation"),
+  edge("p4","representation","feature_engineering"),
+  edge("p5","feature_engineering","task_definition"),
+  edge("p6","task_definition","baselines"),
+  edge("p7","task_definition","ridge"),
+  edge("p8","baselines","evaluation"),
+  edge("p9","ridge","evaluation"),
+  edge("p10","evaluation","governance"),
+  edge("p11","governance","outputs"),
 ];
 
-const ERD_ELEMENTS = [
-  // Tables (light readable blocks)
-  elNode("t_incidents","incidents\n(pk: incident_id)\nmonth, lat, lon, crime_type\ncell_id", "erdTable light", {
-    subtitle:"Main incident fact table (after cleaning).",
-    bullets:[
-      "One row ≈ one police record (or aggregated if decided).",
-      "Foreign key to grid cell for spatial aggregation.",
-      "Drives monthly counts per cell."
-    ]
-  }),
+/* ERD */
+const ERD = [
+  node(
+    "t_dim_cell",
+    "dim_cell\n(cell_id PK)\ncell_x, cell_y\nlat_center, lon_center",
+    "table",
+    {
+      subtitle: "Created in make_dataset.py and saved as dim_cell.parquet.",
+      chips: ["parquet", "spatial"],
+      bullets: [
+        "Defines each grid cell and its center coordinate.",
+        "Used by map rendering and nearest-cell lookup.",
+        "Joins to features via cell_id."
+      ]
+    },
+    { w: 280, h: 110, fs: 14, textMaxW: 240 }
+  ),
 
-  elNode("t_cells","dim_cell\n(pk: cell_id)\ncell_x, cell_y\nlat_center, lon_center", "erdTable light", {
-    subtitle:"Spatial dimension table describing each grid cell.",
-    bullets:[
-      "cell_id built from (cell_x, cell_y).",
-      "Center coordinates used for mapping.",
-      "Joins to every monthly feature row."
-    ]
-  }),
+  node(
+    "t_features",
+    "cell_month_features\n(cell_id, month PK)\ncount\nlags, rolling\nnbr_* (optional)",
+    "table",
+    {
+      subtitle: "Main modelling table saved as cell_month_features.parquet.",
+      chips: ["features", "time-series"],
+      bullets: [
+        "One row per cell per month.",
+        "Target = monthly crime count; features = lags/rolling (+ neighbours).",
+        "This is what Ridge uses in walk-forward."
+      ]
+    },
+    { w: 300, h: 130, fs: 14, textMaxW: 260 }
+  ),
 
-  elNode("t_features","cell_month_features\n(pk: cell_id+month)\ncount\nlags, rolling\nnbr_*", "erdTable light", {
-    subtitle:"Model feature table (one row per cell per month).",
-    bullets:[
-      "Target: monthly crime count per cell.",
-      "Features: lag/rolling and neighbour features.",
-      "Used by baseline + ridge models."
-    ]
-  }),
+  node(
+    "t_wf_results",
+    "walk_forward_results\n(model, predict_month)\nMAE, RMSE\nprecision_at_k",
+    "table",
+    {
+      subtitle: "Evaluation outputs you saved to CSV for baselines and ridge.",
+      chips: ["metrics", "CSV"],
+      bullets: [
+        "Used for comparing models fairly across months.",
+        "Feeds your results table (make_results_table.py).",
+        "Supports reproducibility via file hashes."
+      ]
+    },
+    { w: 300, h: 120, fs: 14, textMaxW: 260 }
+  ),
 
-  elNode("t_predictions","predictions\n(cell_id+forecast_month)\npredicted_count\nrank, is_hotspot", "erdTable light", {
-    subtitle:"Stores outputs for the map and analysis.",
-    bullets:[
-      "Predicted count per cell for forecast month.",
-      "Hotspot flag based on top K%.",
-      "Supports map rendering and point queries."
-    ]
-  }),
+  node(
+    "t_predictions",
+    "predictions (runtime)\nforecast_month\ncell_id\npredicted_count\nrank/is_hotspot",
+    "table",
+    {
+      subtitle: "Not a stored DB table here—computed in API for the selected month/bbox.",
+      chips: ["API output", "ranking"],
+      bullets: [
+        "API ranks cells for chosen forecast_month.",
+        "Returns top K% hotspots for current bbox (optional).",
+        "Point query returns nearest cell + predicted/actual count."
+      ]
+    },
+    { w: 300, h: 130, fs: 14, textMaxW: 260 }
+  ),
 
-  elNode("t_socio","socio_features\n(area_id+month)\ndeprivation, unemployment\neducation, housing", "erdTable light", {
-    subtitle:"Optional contextual features (planned).",
-    bullets:[
-      "Joined by area (LSOA/MSOA) then mapped to cells.",
-      "May be static or time-varying by month.",
-      "Enriches cell_month_features after integration."
-    ]
-  }),
-
-  // Relationships
-  elEdge("e1","t_cells","t_incidents","cell_id"),
-  elEdge("e2","t_cells","t_features","cell_id"),
-  elEdge("e3","t_features","t_predictions","cell_id + month"),
-  elEdge("e4","t_socio","t_features","join via area → cell"),
+  edge("e1","t_dim_cell","t_features","cell_id"),
+  edge("e2","t_features","t_predictions","cell_id + forecast_month"),
+  edge("e3","t_features","t_wf_results","evaluation"),
 ];
 
-const WEB_ELEMENTS = [
-  elNode("w_user","User\n(Browser)","webNode light",{
-    subtitle:"Entry point for the map interface.",
-    bullets:[
-      "Select forecast month and Top K%.",
-      "Pan/zoom map and click to query a point.",
-      "Receives hotspot layer + point prediction."
-    ]
-  }),
+/* Website Architecture */
+const WEB = [
+  node(
+    "w_user",
+    "User\n(Browser)",
+    "web-white",
+    {
+      subtitle: "Controls the map UI: month dropdown, top%, bbox toggle, click-to-query.",
+      chips: ["UI"],
+      bullets: [
+        "Chooses forecast month and hotspot percentage.",
+        "Loads hotspots and inspects point predictions.",
+        "Sees interpretable map output (decision-support)."
+      ]
+    },
+    { w: 220, h: 84, fs: 14, textMaxW: 180 }
+  ),
 
-  elNode("w_netlify","Frontend Hosting\n(Netlify)","webNode dataset",{
-    subtitle:"Static site deployment.",
-    bullets:[
-      "Serves index.html / styles.css / app.js.",
-      "Runs Leaflet map UI in the browser.",
-      "Calls the API over HTTPS."
-    ]
-  }),
+  node(
+    "w_netlify",
+    "Frontend Hosting\n(Netlify)",
+    "web-blue",
+    {
+      subtitle: "Static hosting for index.html / styles.css / app.js.",
+      chips: ["static"],
+      bullets: [
+        "Serves your Leaflet map UI.",
+        "Must call the API using the Render URL (not 127.0.0.1).",
+        "Origin is whitelisted by CORS on the backend."
+      ]
+    },
+    { w: 240, h: 86, fs: 14, textMaxW: 200 }
+  ),
 
-  elNode("w_leaflet","Map UI\n(Leaflet JS)","webNode process",{
-    subtitle:"Client-side map + interactions.",
-    bullets:[
-      "Displays base tiles and hotspot markers.",
-      "Uses current bounding box when requested.",
-      "Sends requests to API: /months, /predict, /predict_point."
-    ]
-  }),
+  node(
+    "w_leaflet",
+    "Map UI\n(Leaflet JS)",
+    "web-teal",
+    {
+      subtitle: "Client-side logic: fetch months, fetch hotspots, point prediction on click.",
+      chips: ["fetch()", "bbox"],
+      bullets: [
+        "GET /months to populate dropdown.",
+        "GET /predict?forecast_month=...&top_pct=...&bbox=...",
+        "GET /predict_point?forecast_month=...&lat=...&lon=..."
+      ]
+    },
+    { w: 260, h: 100, fs: 14, textMaxW: 220 }
+  ),
 
-  elNode("w_render","API Hosting\n(Render)","webNode model",{
-    subtitle:"FastAPI backend deployed as a web service.",
-    bullets:[
-      "Exposes endpoints for months and predictions.",
-      "Applies CORS to allow Netlify origin.",
-      "Loads parquet data + model logic server-side."
-    ]
-  }),
+  node(
+    "w_render",
+    "Backend Hosting\n(Render)",
+    "web-blue",
+    {
+      subtitle: "Runs FastAPI with uvicorn. Uses PORT binding (Render uses 10000 internally).",
+      chips: ["FastAPI", "uvicorn"],
+      bullets: [
+        "Primary URL: your onrender.com domain.",
+        "CORS middleware allows Netlify origin.",
+        "Loads parquet files shipped in repo."
+      ]
+    },
+    { w: 250, h: 96, fs: 14, textMaxW: 210 }
+  ),
 
-  elNode("w_api","FastAPI Service\n(months + predict)","webNode model",{
-    subtitle:"Backend endpoints used by the frontend.",
-    bullets:[
-      "GET /months → list available forecast months.",
-      "GET /predict → hotspots in bbox for forecast month.",
-      "GET /predict_point → nearest cell forecast for clicked point."
-    ]
-  }),
+  node(
+    "w_api",
+    "FastAPI Service\n/months /predict /predict_point",
+    "web-teal",
+    {
+      subtitle: "The API that your frontend talks to (the part that actually predicts).",
+      chips: ["endpoints"],
+      bullets: [
+        "/months returns available forecast months based on history.",
+        "/predict returns hotspot cells for a month (+ optional bbox filter).",
+        "/predict_point returns nearest cell stats for a clicked location."
+      ]
+    },
+    { w: 290, h: 110, fs: 14, textMaxW: 250 }
+  ),
 
-  elNode("w_data","Processed Data\n(parquet)","webNode light",{
-    subtitle:"Model-ready dataset shipped with the backend.",
-    bullets:[
-      "cell_month_features.parquet",
-      "dim_cell.parquet",
-      "Used to compute predictions and render coordinates."
-    ]
-  }),
+  node(
+    "w_parquet",
+    "Processed Data\n(parquet files)\ncell_month_features.parquet\ndim_cell.parquet",
+    "web-white",
+    {
+      subtitle: "These files must exist in the deployed service filesystem (you fixed this).",
+      chips: ["data/processed"],
+      bullets: [
+        "Moved/pointed correctly so Render can read them at runtime.",
+        "FileNotFoundError on Render happened because path was wrong.",
+        "Once fixed, /months returned real months instead of crashing."
+      ]
+    },
+    { w: 310, h: 120, fs: 14, textMaxW: 260 }
+  ),
 
-  elEdge("we1","w_user","w_netlify","HTTPS"),
-  elEdge("we2","w_netlify","w_leaflet","HTML/CSS/JS"),
-  elEdge("we3","w_leaflet","w_api","fetch()"),
-  elEdge("we4","w_api","w_render","runs on"),
-  elEdge("we5","w_render","w_data","reads"),
+  edge("w1","w_user","w_netlify","HTTPS"),
+  edge("w2","w_netlify","w_leaflet","serves JS"),
+  edge("w3","w_leaflet","w_api","fetch()"),
+  edge("w4","w_api","w_render","runs on"),
+  edge("w5","w_render","w_parquet","reads"),
 ];
 
-const DIAGRAMS = {
-  pipeline: PIPELINE_ELEMENTS,
-  erd: ERD_ELEMENTS,
-  web: WEB_ELEMENTS
-};
+const DIAGRAMS = { pipeline: PIPELINE, erd: ERD, web: WEB };
 
-/* -------------------- APP -------------------- */
-
-let cy = null;
-let currentDiagram = "pipeline";
-
-const cyContainer = document.getElementById("cy");
-const panelTitle = document.getElementById("panelTitle");
-const detailsEl = document.getElementById("details");
-const resetBtn = document.getElementById("resetBtn");
-const tabs = Array.from(document.querySelectorAll(".tab"));
-const searchInput = document.getElementById("searchInput");
-const searchBtn = document.getElementById("searchBtn");
-
+/* -------------------- UI -------------------- */
 function setDetailsEmpty() {
   detailsEl.className = "detailsEmpty";
   detailsEl.innerHTML = `
     <div class="emptyIcon">▣</div>
     <div class="emptyTitle">Click a node on the left.</div>
-    <div class="emptySub">This panel explains what it is and how it connects.</div>
-  `;
-}
-
-function setDetails(node) {
-  const d = node.data("details") || {};
-  const title = node.data("label") || node.id();
-  const subtitle = d.subtitle || "";
-  const bullets = Array.isArray(d.bullets) ? d.bullets : [];
-
-  detailsEl.className = "detailsCard";
-  detailsEl.innerHTML = `
-    <h2>${escapeHtml(title).replace(/\n/g, "<br/>")}</h2>
-    ${subtitle ? `<div class="meta">${escapeHtml(subtitle)}</div>` : ""}
-    ${bullets.length ? `<ul>${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
+    <div class="emptySub">You’ll see what it does + how it links to the others.</div>
   `;
 }
 
@@ -543,6 +513,22 @@ function escapeHtml(str) {
     .replaceAll(">","&gt;")
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+}
+
+function setDetails(nodeEl) {
+  const d = nodeEl.data("details") || {};
+  const title = nodeEl.data("label") || nodeEl.id();
+  const subtitle = d.subtitle || "";
+  const chips = Array.isArray(d.chips) ? d.chips : [];
+  const bullets = Array.isArray(d.bullets) ? d.bullets : [];
+
+  detailsEl.className = "detailsCard";
+  detailsEl.innerHTML = `
+    <h2>${escapeHtml(title).replace(/\n/g, "<br/>")}</h2>
+    ${subtitle ? `<div class="meta">${escapeHtml(subtitle)}</div>` : ""}
+    ${chips.length ? `<div class="chips">${chips.map(c => `<span class="chip">${escapeHtml(c)}</span>`).join("")}</div>` : ""}
+    ${bullets.length ? `<ul>${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
+  `;
 }
 
 function positionsKey(diagram) {
@@ -568,7 +554,7 @@ function savePositions(diagram) {
 }
 
 function applyPositions(posObj) {
-  if (!posObj) return false;
+  if (!posObj || !cy) return false;
   let applied = 0;
   cy.nodes().forEach(n => {
     const p = posObj[n.id()];
@@ -580,51 +566,43 @@ function applyPositions(posObj) {
   return applied > 0;
 }
 
-function buildCy(diagram) {
-  if (cy) cy.destroy();
+function runLayout(diagram) {
+  const layout = DIAGRAM_META[diagram].layout;
+  cy.layout(layout).run();
+}
 
+function buildCy(diagram) {
   currentDiagram = diagram;
   panelTitle.textContent = DIAGRAM_META[diagram].title;
-
   setDetailsEmpty();
 
-  const saved = loadPositions(diagram);
+  if (cy) cy.destroy();
 
   cy = cytoscape({
     container: cyContainer,
     elements: DIAGRAMS[diagram],
     style: CY_STYLE,
-    wheelSensitivity: 0.22,
+    wheelSensitivity: 0.20,
   });
 
-  const hadSaved = saved && applyPositions(saved);
+  // If you dragged nodes before, keep them where you put them.
+  const saved = loadPositions(diagram);
+  const applied = saved && applyPositions(saved);
 
-  if (!hadSaved) {
-    cy.layout({
-      name: "dagre",
-      rankDir: "TB",
-      nodeSep: 40,
-      rankSep: 80,
-      edgeSep: 12,
-      padding: 60
-    }).run();
+  if (!applied) {
+    runLayout(diagram);
   }
 
-  // Interactions
+  // click node → details
   cy.on("tap", "node", (evt) => {
+    cy.elements().removeClass("selected");
     const n = evt.target;
-    cy.nodes().removeClass("highlight");
-    n.addClass("highlight");
+    n.addClass("selected");
     setDetails(n);
   });
 
-  // Save after dragging
+  // save positions on drag end
   cy.on("dragfree", "node", () => savePositions(currentDiagram));
-
-  // Nice fit on load
-  setTimeout(() => {
-    cy.fit(cy.elements(), 60);
-  }, 50);
 }
 
 function setActiveTab(diagram) {
@@ -643,7 +621,17 @@ tabs.forEach(btn => {
   });
 });
 
-resetBtn.addEventListener("click", () => {
+fitBtn.addEventListener("click", () => {
+  if (!cy) return;
+  cy.fit(cy.elements(), 70);
+});
+
+resetLayoutBtn.addEventListener("click", () => {
+  if (!cy) return;
+  runLayout(currentDiagram);
+});
+
+resetPosBtn.addEventListener("click", () => {
   localStorage.removeItem(positionsKey(currentDiagram));
   buildCy(currentDiagram);
 });
@@ -653,28 +641,18 @@ function findNode(query) {
   const q = (query || "").trim().toLowerCase();
   if (!q) return;
 
-  const nodes = cy.nodes();
-  let best = null;
-
-  nodes.forEach(n => {
+  let match = null;
+  cy.nodes().forEach(n => {
     const id = (n.id() || "").toLowerCase();
     const label = (n.data("label") || "").toLowerCase();
-    if (id === q || label === q) best = n;
+    if (id.includes(q) || label.includes(q)) match = match || n;
   });
 
-  if (!best) {
-    nodes.forEach(n => {
-      const id = (n.id() || "").toLowerCase();
-      const label = (n.data("label") || "").toLowerCase();
-      if (id.includes(q) || label.includes(q)) best = best || n;
-    });
-  }
-
-  if (best) {
-    cy.nodes().removeClass("highlight");
-    best.addClass("highlight");
-    cy.animate({ center: { eles: best }, zoom: Math.max(cy.zoom(), 1.1) }, { duration: 250 });
-    setDetails(best);
+  if (match) {
+    cy.elements().removeClass("selected");
+    match.addClass("selected");
+    cy.animate({ center: { eles: match }, zoom: Math.max(cy.zoom(), 1.05) }, { duration: 250 });
+    setDetails(match);
   }
 }
 
@@ -683,6 +661,6 @@ searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") findNode(searchInput.value);
 });
 
-// Boot
+/* boot */
 setActiveTab("pipeline");
 buildCy("pipeline");
