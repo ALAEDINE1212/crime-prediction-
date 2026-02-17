@@ -1,524 +1,838 @@
-/* global vis */
+/* global d3 */
 
-let network = null;
-let currentGraphKey = "pipeline";
+const GRAPH_HOST = document.getElementById("graphHost");
+const DETAILS = document.getElementById("details");
 
-const graphTitleEl = document.getElementById("graphTitle");
-const detailsBodyEl = document.getElementById("detailsBody");
-const tabPipeline = document.getElementById("tab-pipeline");
-const tabErd = document.getElementById("tab-erd");
-const resetDetailsBtn = document.getElementById("resetDetails");
+const tabPipeline = document.getElementById("tabPipeline");
+const tabERD = document.getElementById("tabERD");
+const graphTitle = document.getElementById("graphTitle");
+
 const searchInput = document.getElementById("searchInput");
-const searchBtn = document.getElementById("searchBtn");
+const btnFind = document.getElementById("btnFind");
+const btnReset = document.getElementById("btnReset");
 
-/* -----------------------
-   Node detail content
-   Audience-ready language:
-   no "you/your" addressing.
------------------------- */
+const ORIGIN_NETLIFY = "https://ourworkflow.netlify.app";
+const ORIGIN_RENDER = "https://crime-prediction-apii.onrender.com";
 
-const PIPELINE_DETAILS = {
-  crime: {
-    title: "Crime Incident Data (West Yorkshire Police)",
-    tags: ["Dataset", "Raw input"],
-    tagStyle: ["good", "good"],
-    overview: "This is the raw incident-level dataset. Each record represents a reported crime event with location and time information.",
-    keys: "A stable primary key is not always provided. A synthetic identifier can be formed from (datetime + location + crime type) if required.",
-    why: "All downstream tables and model inputs are derived from these raw records.",
-    links: "This dataset feeds into: Pre-processing & Quality Gate → then grid mapping and monthly aggregation.",
-    bullets: [
-      "Common fields: latitude/longitude, datetime, crime type, outcome (often missing).",
-      "Common issues: invalid coordinates, duplicates, missing outcomes, inconsistent category labels.",
-      "A raw immutable copy supports reproducibility and auditing."
+let currentMode = "pipeline";
+let svg, gZoom, sim;
+let nodeSel = null;
+let selectedId = null;
+
+const palette = {
+  data: "#8fb6ff",
+  process: "#f7c84b",
+  model: "#cbd2d9",
+  eval: "#39d98a",
+  gov: "#22cbb5",
+  output: "#b98aff",
+  deploy: "#ff8a65",
+  table: "#9bd7ff"
+};
+
+function buildData() {
+  // ---------- PIPELINE (with deployment) ----------
+  const pipeline = {
+    nodes: [
+      // Inputs
+      { id: "crime_data", label: "Crime Incident Data", sub: "West Yorkshire Police\n(monthly CSVs)", kind: "data", x: 360, y: 110 },
+      { id: "socio_data", label: "Socio-Economic Indicators", sub: "Open Gov / ONS\n(planned)", kind: "data", x: 540, y: 110 },
+
+      // Core pipeline
+      { id: "preprocess", label: "Data Pre-processing\n& Quality Gate", sub: "clean + validate", kind: "process", x: 450, y: 220 },
+      { id: "representation", label: "Spatial & Temporal\nRepresentation", sub: "grid + monthly", kind: "process", x: 450, y: 320 },
+      { id: "feature_eng", label: "Feature Engineering", sub: "lags + rolling\n+ neighbours", kind: "process", x: 450, y: 420 },
+      { id: "task", label: "Prediction Task\nDefinition", sub: "forecast + hotspots", kind: "process", x: 450, y: 520 },
+
+      // Models
+      { id: "baseline", label: "Baseline Models", sub: "lag-1 / seasonal", kind: "model", x: 330, y: 620 },
+      { id: "ridge", label: "Ridge Regression", sub: "lags + rolling\n(+ neighbours)", kind: "model", x: 450, y: 620 },
+      { id: "cnn_gru", label: "Spatio-Temporal Model", sub: "CNN + GRU\n(planned)", kind: "model", x: 570, y: 620 },
+
+      // Eval + governance + outputs
+      { id: "evaluation", label: "Evaluation &\nValidation", sub: "walk-forward +\nMAE/RMSE/P@K", kind: "eval", x: 450, y: 720 },
+      { id: "governance", label: "Responsible AI\n& Governance", sub: "bias awareness +\ntransparency", kind: "gov", x: 450, y: 820 },
+      { id: "outputs", label: "Decision-Support\nOutputs", sub: "hotspot map +\ntables", kind: "output", x: 450, y: 920 },
+
+      // Deployment layer (what was actually done)
+      { id: "deployment", label: "Deployment\n& Delivery", sub: "usable system", kind: "deploy", x: 450, y: 1030 },
+      { id: "artifacts", label: "Processed Data\nArtifacts", sub: "Parquet files\n(features + grid)", kind: "deploy", x: 260, y: 1120 },
+      { id: "api_render", label: "Backend API", sub: "FastAPI on Render", kind: "deploy", x: 450, y: 1120 },
+      { id: "ui_netlify", label: "Frontend Web Map", sub: "Leaflet on Netlify", kind: "deploy", x: 640, y: 1120 },
+      { id: "cors_config", label: "CORS + Config", sub: "Origins + API base\n(local vs cloud)", kind: "deploy", x: 830, y: 1120 }
+    ],
+    links: [
+      { source: "crime_data", target: "preprocess" },
+      { source: "socio_data", target: "preprocess", dim: true },
+
+      { source: "preprocess", target: "representation" },
+      { source: "representation", target: "feature_eng" },
+      { source: "feature_eng", target: "task" },
+
+      { source: "task", target: "baseline" },
+      { source: "task", target: "ridge" },
+      { source: "task", target: "cnn_gru", dim: true },
+
+      { source: "baseline", target: "evaluation" },
+      { source: "ridge", target: "evaluation" },
+      { source: "cnn_gru", target: "evaluation", dim: true },
+
+      { source: "evaluation", target: "governance" },
+      { source: "governance", target: "outputs" },
+
+      { source: "outputs", target: "deployment" },
+      { source: "deployment", target: "api_render" },
+      { source: "deployment", target: "ui_netlify" },
+      { source: "deployment", target: "cors_config" },
+
+      { source: "artifacts", target: "api_render" },
+      { source: "api_render", target: "ui_netlify" },
+      { source: "cors_config", target: "api_render", dim: true },
+      { source: "cors_config", target: "ui_netlify", dim: true }
+    ]
+  };
+
+  // ---------- ERD ----------
+  const erd = {
+    nodes: [
+      { id: "raw_street", label: "raw_street", sub: "Monthly street crime CSVs", kind: "table", x: 300, y: 200 },
+      { id: "raw_outcomes", label: "raw_outcomes", sub: "Outcomes CSVs", kind: "table", x: 600, y: 200 },
+      { id: "raw_stop", label: "raw_stop_search", sub: "Stop & search CSVs", kind: "table", x: 900, y: 200 },
+
+      { id: "dim_cell", label: "dim_cell", sub: "Grid cell dimension", kind: "table", x: 300, y: 420 },
+      { id: "fact_cell_month", label: "cell_month_features", sub: "Cell × month features", kind: "table", x: 600, y: 420 },
+      { id: "hotspots", label: "hotspots", sub: "Top-K predicted cells", kind: "table", x: 900, y: 420 },
+
+      { id: "wf_results", label: "walk_forward_results", sub: "Per-month evaluation", kind: "table", x: 600, y: 620 }
+    ],
+    links: [
+      { source: "raw_street", target: "raw_outcomes", dim: true },
+      { source: "raw_street", target: "dim_cell" },
+      { source: "dim_cell", target: "fact_cell_month" },
+      { source: "fact_cell_month", target: "hotspots" },
+      { source: "fact_cell_month", target: "wf_results" }
+    ]
+  };
+
+  return { pipeline, erd };
+}
+
+const DATA = buildData();
+
+const DETAILS_TEXT = {
+  // Pipeline details
+  crime_data: {
+    title: "Crime Incident Data (West Yorkshire)",
+    tags: ["Input data", "UK Police API CSVs"],
+    what: [
+      "Monthly street-level records (location, date, crime type, outcome reference).",
+      "Primary signal used to build cell × month crime counts."
+    ],
+    connects: [
+      "Feeds into preprocessing for cleaning and coordinate validation.",
+      "Later aggregated into spatial grid cells and monthly time series."
+    ],
+    implementation: [
+      "Stored under data/raw/YYYY-MM/ as street CSV files.",
+      "Key fields: latitude, longitude, month/date, crime_type."
     ]
   },
-  socio: {
-    title: "Socio-Economic Indicators (Open Government Data)",
-    tags: ["Dataset", "External features"],
-    tagStyle: ["good", "purple"],
-    overview: "This dataset provides external context such as deprivation, unemployment, housing, and education indicators, typically published by official areas (LSOA/MSOA).",
-    keys: "Keyed by area_id (LSOA/MSOA code) and a time period (year or month depending on the source).",
-    why: "These indicators add structural information that is not captured by historical crime counts alone.",
-    links: "Merged via: dim_area + (optional) bridge_cell_area → then attached to cell-month features.",
-    bullets: [
-      "A common mismatch occurs when socio-economic data is yearly while crime aggregation is monthly; the alignment method must be documented.",
-      "A mapping is required between grid cells and LSOA/MSOA areas (centroid or overlap weights)."
+
+  socio_data: {
+    title: "Socio-Economic Indicators (planned)",
+    tags: ["External features", "Open Government / ONS"],
+    what: [
+      "Area-level indicators such as deprivation, unemployment, housing, education.",
+      "Used to enrich the model with context beyond past crime counts."
+    ],
+    connects: [
+      "Joined after preprocessing via spatial linkage (e.g., LSOA/MSOA/ward → grid).",
+      "Merged into the cell × month feature table as static or slowly-changing covariates."
+    ],
+    implementation: [
+      "Requires a reliable join strategy: areal polygons ↔ grid cells (centroid or intersection).",
+      "Feature fusion should be versioned and documented to avoid silent leakage."
     ]
   },
-  prep: {
+
+  preprocess: {
     title: "Data Pre-processing & Quality Gate",
-    tags: ["Pipeline stage", "High risk"],
-    tagStyle: ["purple", "warn"],
-    overview: "This stage cleans the raw data and enforces consistency rules before feature engineering and modelling.",
-    why: "Without strict cleaning, the pipeline trains on noise and produces misleading evaluation scores and heatmaps.",
-    links: "Inputs: raw crime data + socio-economic data. Output: cleaned crime records ready for spatial-temporal processing.",
-    bullets: [
-      "Remove invalid coordinates (NaN, 0,0, out-of-bounds).",
-      "Apply a single consistent policy for 'No Location'.",
-      "Deduplicate using incident IDs or a well-defined heuristic.",
-      "Maintain an audit log of row counts before/after each cleaning step."
+    tags: ["Cleaning", "Validation", "Consistency"],
+    what: [
+      "Removes unusable rows and standardises the dataset before feature building.",
+      "Prevents downstream steps from training on broken coordinates or duplicate records."
+    ],
+    connects: [
+      "Outputs clean incident rows for grid mapping and monthly aggregation.",
+      "Defines the data quality policy (missing location handling, deduplication)."
+    ],
+    implementation: [
+      "Typical operations: drop invalid coordinates, handle missing values, remove duplicates.",
+      "Quality checks should be logged: rows removed, reasons, date coverage."
     ]
   },
-  repr: {
+
+  representation: {
     title: "Spatial & Temporal Representation",
-    tags: ["Feature engineering", "Representation"],
-    tagStyle: ["purple", "purple"],
-    overview: "This stage converts point incidents into a structured spatio-temporal dataset suitable for modelling.",
-    why: "Models require consistent inputs: fixed spatial units (grid cells) over fixed temporal steps (months).",
-    links: "Output: an aggregated cell-month (or cell-month-type) table with lag/rolling features and optional spatial lags.",
-    bullets: [
-      "Grid discretisation maps incidents to cell_id using a fixed resolution (e.g., 250m/500m).",
-      "Monthly aggregation produces counts per cell per month.",
-      "Socio-economic indicators are fused into the same rows via area mapping.",
-      "Optional: neighbour-based spatial lag features can capture local spillover effects."
+    tags: ["Grid discretisation", "Monthly aggregation"],
+    what: [
+      "Maps latitude/longitude into a consistent grid (cell_id).",
+      "Aggregates incident counts per cell per month to form time-series targets."
+    ],
+    connects: [
+      "Produces dim_cell (geometry / center) and the base cell × month count table.",
+      "Enables neighbour calculations and time-series feature engineering."
+    ],
+    implementation: [
+      "Coordinate transform (meters) → cell_x, cell_y → cell_id.",
+      "Monthly aggregation: groupby(cell_id, month) → crime_count."
     ]
   },
+
+  feature_eng: {
+    title: "Feature Engineering (lags + rolling + neighbours)",
+    tags: ["Time-series features", "Spatial context"],
+    what: [
+      "Creates predictors from past values (lags) and recent history (rolling stats).",
+      "Adds neighbourhood signals (e.g., mean/max of adjacent cells) to capture spillover."
+    ],
+    connects: [
+      "Outputs the ML-ready table: cell_month_features.parquet.",
+      "Provides inputs to baseline and ridge models; also becomes input tensor for deep models."
+    ],
+    implementation: [
+      "Examples: lag_1, lag_12, rolling_3_mean, rolling_6_mean, nbr_lag1_mean, nbr_lag1_max.",
+      "Neighbour features must align row-by-row with the base table (stable row index)."
+    ]
+  },
+
   task: {
     title: "Prediction Task Definition",
-    tags: ["ML task", "Must lock"],
-    tagStyle: ["good", "warn"],
-    overview: "This defines the prediction target and label logic used for training and evaluation.",
-    why: "A fixed task definition makes metrics meaningful and prevents inconsistent performance claims.",
-    links: "Determines which target fields appear in the fact table (e.g., target_next_count or hotspot_label).",
-    bullets: [
-      "Primary task: next-month crime count forecasting per cell (regression).",
-      "Secondary task: hotspot identification (Top-K% cells) (ranking/classification).",
-      "K and label thresholds must be stated explicitly because hotspot classes are typically imbalanced."
+    tags: ["Forecasting", "Hotspot ranking"],
+    what: [
+      "Primary: one-step-ahead forecasting of next-month crime counts per grid cell.",
+      "Secondary: hotspot identification by ranking cells and selecting the top percentage (top-K)."
+    ],
+    connects: [
+      "All models predict the same target to allow fair evaluation.",
+      "Hotspot metrics (Precision@K, Hit-rate@K) are computed from ranked predictions."
+    ],
+    implementation: [
+      "Target: next_month_count per cell.",
+      "Hotspots: top_pct × number_of_cells within a month (or within a viewport)."
     ]
   },
-  base: {
+
+  baseline: {
     title: "Baseline Models",
-    tags: ["Baselines", "Interpretability"],
-    tagStyle: ["good", "purple"],
-    overview: "Baselines provide a realistic reference level of performance using simple, interpretable techniques.",
-    why: "If a complex model cannot outperform strong baselines, added complexity is not justified.",
-    links: "Compared against the deep model using the same time split and evaluation metrics.",
-    bullets: [
-      "Seasonal-naive: next month approximated by last month or the same month last year.",
-      "Cluster + SARIMA: group similar cells then forecast per cluster/cell for interpretability.",
-      "Baselines provide credibility for any reported improvement."
+    tags: ["Sanity check", "Interpretability-first"],
+    what: [
+      "Simple benchmarks (e.g., predict next month = last month).",
+      "Establishes a minimum performance target and catches broken pipelines."
+    ],
+    connects: [
+      "Compared against ridge and later deep learning models using the same walk-forward protocol."
+    ],
+    implementation: [
+      "Examples: lag-1 baseline, seasonal lag-12 baseline."
     ]
   },
-  deep: {
-    title: "Spatio-Temporal Deep Model (CNN + GRU)",
+
+  ridge: {
+    title: "Ridge Regression (current best practical model)",
+    tags: ["Linear model", "Strong baseline", "Fast"],
+    what: [
+      "Linear model with L2 regularisation that handles correlated lag/rolling features.",
+      "Often performs well for sparse time-series with engineered features."
+    ],
+    connects: [
+      "Trained and evaluated with walk-forward validation.",
+      "Supports hotspot ranking and map-based delivery."
+    ],
+    implementation: [
+      "Inputs: lags + rolling (+ neighbour features).",
+      "Outputs: predicted next-month counts used for ranking."
+    ]
+  },
+
+  cnn_gru: {
+    title: "Spatio-Temporal Model (CNN + GRU) (planned)",
     tags: ["Deep learning", "Spatio-temporal"],
-    tagStyle: ["good", "purple"],
-    overview: "This model captures spatial patterns (where) and temporal dynamics (when) using sequences of grid-based inputs.",
-    why: "Hotspots are spatially structured and evolve over time; deep spatio-temporal models can learn these patterns jointly.",
-    links: "Input: past N months of grid maps/features → Output: next-month crime count grid and/or hotspot probabilities.",
-    bullets: [
-      "CNN extracts spatial structure from grid-like inputs.",
-      "GRU models temporal evolution over a lookback window (e.g., 6–12 months).",
-      "Chronological splitting is required to avoid time leakage."
+    what: [
+      "CNN captures spatial patterns (local structure across grid).",
+      "GRU captures temporal dynamics across the lookback window."
+    ],
+    connects: [
+      "Uses the same targets and evaluation protocol to avoid unfair comparisons.",
+      "Requires careful handling of missing cells and stable grid indexing."
+    ],
+    implementation: [
+      "Needs tensor construction: (time, height, width, channels) or graph variant.",
+      "Not implemented in the current deployed system."
     ]
   },
-  eval: {
+
+  evaluation: {
     title: "Evaluation & Validation",
-    tags: ["Testing", "No leakage"],
-    tagStyle: ["good", "warn"],
-    overview: "Evaluation measures future generalization by testing on later time periods not used for training.",
-    why: "Time-based validation prevents overly optimistic scores caused by leakage and non-causal correlations.",
-    links: "Reports forecasting error metrics, hotspot ranking metrics, and qualitative map comparisons.",
-    bullets: [
-      "Chronological split: train (2018–2022), validation (2023), test (2024).",
-      "Forecasting metrics: MAE and RMSE.",
-      "Hotspot metrics: Precision@K and Hit-rate@K.",
-      "Error analysis highlights months/areas where the model fails and why."
+    tags: ["Walk-forward", "MAE/RMSE", "Precision@K"],
+    what: [
+      "Walk-forward validation: train on past months, predict the next, repeat over time.",
+      "Reports error metrics and hotspot ranking metrics to measure usefulness."
+    ],
+    connects: [
+      "Feeds evidence into governance (limitations, reliability, failure modes).",
+      "Supports visual outputs (monthly hotspot plots, trend graphs)."
+    ],
+    implementation: [
+      "Metrics: MAE, RMSE, Precision@K (and optionally Hit-rate@K).",
+      "Artifacts saved as CSV (per-month results) and PNG figures."
     ]
   },
-  gov: {
+
+  governance: {
     title: "Responsible AI & Governance",
-    tags: ["Ethics", "Limitations"],
-    tagStyle: ["good", "warn"],
-    overview: "Governance documents intended use, limitations, and safeguards to reduce the risk of harm or misuse.",
-    why: "Reported crime data reflects reporting and enforcement patterns and can embed bias; outputs must remain decision-support rather than individual targeting.",
-    links: "Shown in the prototype as a model card and stated in documentation as constraints and non-uses.",
-    bullets: [
-      "Bias note: recorded crime ≠ true crime prevalence.",
-      "Privacy: only aggregated cell/month outputs are produced.",
-      "Intended use: resource planning and situational awareness, not profiling individuals."
+    tags: ["Bias awareness", "Decision-support only"],
+    what: [
+      "Documents data limitations, reporting bias, and appropriate use boundaries.",
+      "Keeps the system as decision-support rather than an automated enforcement tool."
+    ],
+    connects: [
+      "Shapes what is displayed on the map and how outputs are explained.",
+      "Defines limitations and safe interpretation."
+    ],
+    implementation: [
+      "Report disclaimers, model cards, transparent evaluation reporting."
     ]
   },
-  out: {
+
+  outputs: {
     title: "Decision-Support Outputs",
-    tags: ["Prototype", "Outputs"],
-    tagStyle: ["good", "good"],
-    overview: "Outputs are presented as maps and ranked hotspot lists designed to support planning decisions.",
-    why: "A decision-support system is only credible when outputs are interpretable and accompanied by evaluation evidence.",
-    links: "Uses dim_cell for mapping, plus evaluation tables and limitations for transparency.",
-    bullets: [
-      "Risk heatmaps per month (predicted vs actual comparison).",
-      "Ranked hotspot list (Top-K cells).",
-      "Evaluation tables and a short model card describing assumptions and limits."
+    tags: ["Hotspot map", "Ranked cells", "Evaluation tables"],
+    what: [
+      "Ranked hotspot areas for a forecast month.",
+      "Tables/figures for evaluation and comparison across models."
+    ],
+    connects: [
+      "Delivered to users via the deployed API + web map.",
+      "Also used in the report as visual evidence."
+    ],
+    implementation: [
+      "Outputs include top predicted cells, summary metrics, and map visualisations."
     ]
-  }
-};
+  },
 
-const ERD_DETAILS = {
+  // Deployment nodes
+  deployment: {
+    title: "Deployment & Delivery (what turned it into a usable system)",
+    tags: ["Production wiring", "Frontend + Backend"],
+    what: [
+      "Moves from offline scripts to a system that can answer prediction queries.",
+      "Separates concerns: backend generates predictions, frontend displays them."
+    ],
+    connects: [
+      "Consumes processed artifacts (Parquet) and model logic.",
+      "Provides endpoints that the web map calls in real time."
+    ],
+    implementation: [
+      "Backend deployed on Render; frontend deployed on Netlify.",
+      "API base URL must switch between localhost and cloud deployment."
+    ]
+  },
+
+  artifacts: {
+    title: "Processed Data Artifacts (Parquet)",
+    tags: ["Deployment dependency", "Fast load"],
+    what: [
+      "Precomputed ML-ready tables used by the backend for prediction.",
+      "Avoids re-parsing raw CSVs on every server start."
+    ],
+    connects: [
+      "Loaded by the backend API at runtime.",
+      "Must exist in the deployed backend directory."
+    ],
+    implementation: [
+      "Required files:",
+      "crime_map_app/data/processed/cell_month_features.parquet",
+      "crime_map_app/data/processed/dim_cell.parquet"
+    ]
+  },
+
+  api_render: {
+    title: "Backend API (FastAPI on Render)",
+    tags: ["Render deployment", "REST endpoints"],
+    what: [
+      "Serves forecast months and prediction endpoints to the frontend.",
+      "Loads processed parquet artifacts and generates hotspot outputs."
+    ],
+    connects: [
+      "Front-end calls /months, /predict, /predict_point.",
+      "CORS must allow the Netlify origin to avoid browser blocking."
+    ],
+    implementation: [
+      `Render URL: ${ORIGIN_RENDER}`,
+      "Typical start command: uvicorn backend.app:app --host 0.0.0.0 --port $PORT",
+      "Must not reference localhost inside the deployed backend."
+    ]
+  },
+
+  ui_netlify: {
+    title: "Frontend Web Map (Leaflet on Netlify)",
+    tags: ["Netlify deployment", "Interactive map"],
+    what: [
+      "Displays predicted hotspot cells on a real map.",
+      "Allows choosing forecast month and selecting top percentage."
+    ],
+    connects: [
+      "Fetches forecast months from the backend, then queries hotspots for the visible viewport.",
+      "Clicking the map triggers a nearest-cell prediction request."
+    ],
+    implementation: [
+      `Netlify site: ${ORIGIN_NETLIFY}`,
+      "app.js must set API_BASE to the Render URL when deployed.",
+      "Leaflet renders points for predicted hotspots."
+    ]
+  },
+
+  cors_config: {
+    title: "CORS + Configuration (the reason the deployed version works)",
+    tags: ["Browser security", "Environment correctness"],
+    what: [
+      "CORS controls which website origins can call the API in a browser.",
+      "Configuration controls local vs cloud API base URLs."
+    ],
+    connects: [
+      "Without CORS headers, the browser blocks fetch() even if the API is healthy.",
+      "The frontend must call Render URL in production, not 127.0.0.1."
+    ],
+    implementation: [
+      `Allow origin: ${ORIGIN_NETLIFY}`,
+      "FastAPI: CORSMiddleware allow_origins=[Netlify URL].",
+      "Frontend: API_BASE set to Render URL in production."
+    ]
+  },
+
+  // ERD details
+  raw_street: {
+    title: "ERD: raw_street",
+    tags: ["Raw", "CSV"],
+    what: [
+      "Street-level crime incidents per month.",
+      "Contains location + time + type fields used for aggregation."
+    ],
+    connects: [
+      "Optionally linked to outcomes via crime_id.",
+      "Mapped into grid cells for dim_cell and fact features."
+    ],
+    implementation: [
+      "Stored as monthly CSV files, typically named: YYYY-MM-*-street.csv"
+    ]
+  },
+
+  raw_outcomes: {
+    title: "ERD: raw_outcomes",
+    tags: ["Raw", "CSV"],
+    what: [
+      "Outcome records linked to crimes (when available).",
+      "Not required for the current forecasting target, but useful for analysis."
+    ],
+    connects: [
+      "Linked to raw_street using crime_id (when present)."
+    ],
+    implementation: [
+      "Stored as monthly CSV files, typically named: YYYY-MM-*-outcomes.csv"
+    ]
+  },
+
+  raw_stop: {
+    title: "ERD: raw_stop_search",
+    tags: ["Raw", "CSV"],
+    what: [
+      "Stop and search records (separate dataset).",
+      "Can be used as an additional signal or for exploratory analysis."
+    ],
+    connects: [
+      "Not required for the current model; potential future fusion feature source."
+    ],
+    implementation: [
+      "Stored as monthly CSV files, typically named: YYYY-MM-*-stop-and-search.csv"
+    ]
+  },
+
   dim_cell: {
-    title: "dim_cell (Grid Cells)",
-    tags: ["Dimension", "Geospatial"],
-    tagStyle: ["purple", "good"],
-    overview: "A dimension table describing each grid cell used as the spatial unit of analysis.",
-    keys: "Primary key: cell_id",
-    why: "Cell metadata (e.g., centre latitude/longitude) is stored once and linked from the fact table rather than repeated in every measurement row.",
-    links: "fact_crime.cell_id → dim_cell.cell_id",
-    example: "When a model predicts a specific cell_id as high risk, dim_cell provides the coordinates needed to plot that cell on a heatmap.",
-    bullets: [
-      "Typical fields: lat_center, lon_center, optional district label.",
-      "Enables mapping model outputs back into geographic visualizations."
+    title: "ERD: dim_cell",
+    tags: ["Dimension table", "Grid geometry"],
+    what: [
+      "Defines the spatial grid: each row represents one grid cell.",
+      "Stores cell indices and geographic center coordinates."
+    ],
+    connects: [
+      "Referenced by cell_month_features and hotspot outputs via cell_id."
+    ],
+    implementation: [
+      "Saved as dim_cell.parquet."
     ]
   },
-  dim_time: {
-    title: "dim_time (Monthly Time Dimension)",
-    tags: ["Dimension", "Time"],
-    tagStyle: ["purple", "good"],
-    overview: "A dimension table describing each monthly time step in the dataset.",
-    keys: "Primary key: month_id",
-    why: "A shared time dimension supports consistent splitting, seasonality features, and cleaner joins compared to repeated raw date strings.",
-    links: "fact_crime.month_id → dim_time.month_id; fact_socio_econ also links to time where applicable.",
-    example: "month_id = 2023-07 links all July 2023 measurements to the same time metadata (year, month number).",
-    bullets: [
-      "Typical fields: year, month_num, month_str (YYYY-MM).",
-      "Supports chronological train/validation/test evaluation."
+
+  fact_cell_month: {
+    title: "ERD: cell_month_features",
+    tags: ["Fact table", "ML features"],
+    what: [
+      "The main ML table: one row per cell per month.",
+      "Includes crime_count, lag features, rolling features, neighbour features, and target."
+    ],
+    connects: [
+      "Used to train and evaluate models.",
+      "Used by the backend to generate hotspot predictions."
+    ],
+    implementation: [
+      "Saved as cell_month_features.parquet."
     ]
   },
-  dim_crime_type: {
-    title: "dim_crime_type (Crime Categories)",
-    tags: ["Dimension", "Optional"],
-    tagStyle: ["purple", "warn"],
-    overview: "A dimension table listing standardized crime categories.",
-    keys: "Primary key: crime_type_id",
-    why: "Standardization avoids repeated strings in the fact table and enables filtering by category in analysis and outputs.",
-    links: "fact_crime.crime_type_id → dim_crime_type.crime_type_id (only when modelling by type).",
-    example: "crime_type_id = 3 may represent 'Burglary'; the name is stored once in dim_crime_type.",
-    bullets: [
-      "This dimension can be omitted when modelling total crime counts only (cell-month).",
-      "Including it typically produces a cell-month-type fact table."
+
+  hotspots: {
+    title: "ERD: hotspots",
+    tags: ["Derived", "Ranking output"],
+    what: [
+      "Top-ranked predicted cells for a given forecast month.",
+      "Used for map visualisation and decision-support reporting."
+    ],
+    connects: [
+      "Derived from model predictions computed from cell_month_features."
+    ],
+    implementation: [
+      "Returned by /predict with optional bbox filtering."
     ]
   },
-  dim_area: {
-    title: "dim_area (LSOA/MSOA Areas)",
-    tags: ["Dimension", "Socio key"],
-    tagStyle: ["purple", "good"],
-    overview: "A dimension table for official government statistical areas (LSOA/MSOA) used by socio-economic datasets.",
-    keys: "Primary key: area_id (LSOA/MSOA code)",
-    why: "Socio-economic indicators are published at area level, so an area dimension is necessary for correct integration.",
-    links: "fact_socio_econ.area_id → dim_area.area_id; bridge_cell_area.area_id → dim_area.area_id",
-    example: "area_id identifies a specific LSOA/MSOA; socio-economic values attach to that area and are later transferred to grid cells.",
-    bullets: [
-      "Stores area metadata (codes/names).",
-      "Acts as the join point for socio-economic indicators."
-    ]
-  },
-  fact_crime: {
-    title: "fact_crime (Aggregated Crime Counts)",
-    tags: ["Fact table", "Model input"],
-    tagStyle: ["good", "good"],
-    overview: "The central fact table storing the measured quantities after aggregation.",
-    oneRow: "One row typically represents one grid cell in one month (and optionally one crime type).",
-    keys: "Foreign keys: cell_id → dim_cell, month_id → dim_time, optional crime_type_id → dim_crime_type",
-    why: "This is the dataset used directly for modelling; other tables provide context and joinable metadata.",
-    links: "Joins to dimensions to support analysis by location, time, and category and to produce interpretable outputs.",
-    example: "cell_id=102, month_id=2023-07, count=18 indicates 18 crimes in that cell during July 2023.",
-    bullets: [
-      "May also include target_next_count (forecast target) and hotspot_label (classification target).",
-      "Created from the pipeline’s aggregation and feature engineering stages."
-    ]
-  },
-  bridge_cell_area: {
-    title: "bridge_cell_area (Cell ↔ Area Mapping)",
-    tags: ["Bridge", "Correct join"],
-    tagStyle: ["purple", "warn"],
-    overview: "A bridge table mapping custom grid cells to official LSOA/MSOA areas.",
-    oneRow: "One row indicates that a grid cell overlaps a specific area by a given proportion.",
-    keys: "Foreign keys: cell_id → dim_cell, area_id → dim_area, plus weight ∈ [0,1]",
-    why: "Grid cells rarely align perfectly with area boundaries. The bridge enables correct transfer of socio-economic indicators to cells.",
-    links: "Used to attach fact_socio_econ(area) indicators to cell-based modelling rows in fact_crime.",
-    example: "If overlap is 0.7 with Area A and 0.3 with Area B, a weighted cell indicator is computed as 0.7×A + 0.3×B.",
-    bullets: [
-      "A simpler alternative is nearest-centroid mapping, but it is less accurate at boundaries.",
-      "Weights reduce boundary mismatch errors and improve data integration quality."
-    ]
-  },
-  fact_socio_econ: {
-    title: "fact_socio_econ (Socio-Economic Indicators)",
-    tags: ["Fact table", "External features"],
-    tagStyle: ["good", "purple"],
-    overview: "A fact-like table storing socio-economic measurements for each official area and time period.",
-    oneRow: "One row represents one area in one time period with its indicator values.",
-    keys: "Foreign key: area_id → dim_area, plus a time key (month_id or year depending on source).",
-    why: "External indicators provide context signals used as features during modelling and analysis.",
-    links: "Joined to grid cells via bridge_cell_area and then merged into cell-month modelling rows.",
-    example: "area_id=E010…, year=2023, unemployment=… represents that area’s socio-economic state for that period.",
-    bullets: [
-      "Time granularity can be yearly while crime is monthly; the alignment method must be stated.",
-      "Typical fields: deprivation, unemployment, housing, education."
+
+  wf_results: {
+    title: "ERD: walk_forward_results",
+    tags: ["Evaluation", "Time-based testing"],
+    what: [
+      "Per-month walk-forward metrics for each model.",
+      "Supports comparison using MAE, RMSE, and Precision@K."
+    ],
+    connects: [
+      "Generated by walk_forward.py and summarised for reporting."
+    ],
+    implementation: [
+      "Saved as CSV files (e.g., wf_ridge.csv)."
     ]
   }
 };
 
-/* -----------------------
-   Graph definitions
------------------------- */
-
-function pipelineGraph() {
-  return {
-    title: "Pipeline Diagram",
-    details: PIPELINE_DETAILS,
-    nodes: [
-      { id: "crime", label: "Crime Incident Data\n(West Yorkshire Police)\n2018–Jan 2024", color: "#6aa6ff" },
-      { id: "socio", label: "Socio-Economic Indicators\n(Open Gov Data)", color: "#6aa6ff" },
-      { id: "prep", label: "Data Pre-processing &\nQuality Gate", color: "#ffd166" },
-      { id: "repr", label: "Spatial & Temporal\nRepresentation", color: "#ffd166" },
-      { id: "task", label: "Prediction Task\nDefinition", color: "#ffd166" },
-      { id: "base", label: "Baseline Models", color: "#a9b1c3" },
-      { id: "deep", label: "Spatio-Temporal Model\nCNN + GRU", color: "#a9b1c3" },
-      { id: "eval", label: "Evaluation &\nValidation", color: "#4fd1a5" },
-      { id: "gov", label: "Responsible AI &\nGovernance", color: "#4fd1a5" },
-      { id: "out", label: "Decision-Support\nOutputs", color: "#b892ff" }
-    ],
-    edges: [
-      { from: "crime", to: "prep" },
-      { from: "socio", to: "prep" },
-      { from: "prep", to: "repr" },
-      { from: "repr", to: "task" },
-      { from: "task", to: "base" },
-      { from: "task", to: "deep" },
-      { from: "base", to: "eval" },
-      { from: "deep", to: "eval" },
-      { from: "eval", to: "gov" },
-      { from: "gov", to: "out" }
-    ],
-    options: {
-      layout: {
-        hierarchical: {
-          enabled: true,
-          direction: "UD",
-          sortMethod: "directed",
-          levelSeparation: 120,
-          nodeSpacing: 160
-        }
-      },
-      physics: { enabled: false },
-      interaction: { hover: true },
-      nodes: {
-        shape: "box",
-        borderWidth: 2,
-        font: { color: "#0b0e14", size: 16, face: "Arial" }
-      },
-      edges: {
-        arrows: { to: { enabled: true } },
-        smooth: { type: "cubicBezier", forceDirection: "vertical", roundness: 0.4 }
-      }
-    }
-  };
+function setMode(mode) {
+  currentMode = mode;
+  selectedId = null;
+  render(mode);
+  clearDetails();
 }
 
-function erdGraph() {
-  return {
-    title: "Relational ERD",
-    details: ERD_DETAILS,
-    nodes: [
-      { id: "dim_cell", label: "dim_cell\nPK: cell_id", color: "#6aa6ff" },
-      { id: "dim_time", label: "dim_time\nPK: month_id", color: "#6aa6ff" },
-      { id: "dim_crime_type", label: "dim_crime_type\nPK: crime_type_id", color: "#6aa6ff" },
-      { id: "dim_area", label: "dim_area\nPK: area_id", color: "#6aa6ff" },
-      { id: "fact_crime", label: "fact_crime\nFK: cell_id, month_id,\ncrime_type_id\ncount/targets", color: "#ffd166" },
-      { id: "bridge_cell_area", label: "bridge_cell_area\nFK: cell_id, area_id\nweight", color: "#4fd1a5" },
-      { id: "fact_socio_econ", label: "fact_socio_econ\nFK: area_id, month_id/year\nindicators…", color: "#b892ff" }
-    ],
-    edges: [
-      { from: "fact_crime", to: "dim_cell", label: "cell_id" },
-      { from: "fact_crime", to: "dim_time", label: "month_id" },
-      { from: "fact_crime", to: "dim_crime_type", label: "crime_type_id" },
-      { from: "bridge_cell_area", to: "dim_cell", label: "cell_id" },
-      { from: "bridge_cell_area", to: "dim_area", label: "area_id" },
-      { from: "fact_socio_econ", to: "dim_area", label: "area_id" },
-      { from: "fact_socio_econ", to: "dim_time", label: "month_id/year" }
-    ],
-    options: {
-      physics: {
-        enabled: true,
-        barnesHut: {
-          gravitationalConstant: -25000,
-          centralGravity: 0.25,
-          springLength: 170,
-          springConstant: 0.05,
-          damping: 0.25
-        },
-        minVelocity: 0.75
-      },
-      interaction: { hover: true },
-      nodes: {
-        shape: "box",
-        borderWidth: 2,
-        font: { color: "#0b0e14", size: 15, face: "Arial" }
-      },
-      edges: {
-        arrows: { to: { enabled: true } },
-        smooth: { type: "dynamic" },
-        font: { align: "middle" }
-      }
-    }
-  };
-}
-
-const GRAPHS = {
-  pipeline: pipelineGraph,
-  erd: erdGraph
-};
-
-/* -----------------------
-   Rendering
------------------------- */
-
-function renderGraph(key) {
-  currentGraphKey = key;
-  const cfg = GRAPHS[key]();
-
-  graphTitleEl.textContent = cfg.title;
-
-  tabPipeline.classList.toggle("active", key === "pipeline");
-  tabErd.classList.toggle("active", key === "erd");
-
-  renderEmptyDetails();
-
-  const container = document.getElementById("network");
-  const data = {
-    nodes: new vis.DataSet(cfg.nodes),
-    edges: new vis.DataSet(cfg.edges)
-  };
-
-  if (network) network.destroy();
-  network = new vis.Network(container, data, cfg.options);
-
-  network.on("click", function (params) {
-    if (!params.nodes || params.nodes.length === 0) return;
-    const nodeId = params.nodes[0];
-    renderDetails(nodeId, cfg.details);
-    network.selectNodes([nodeId]);
-  });
-
-  network.on("doubleClick", function (params) {
-    if (!params.nodes || params.nodes.length === 0) return;
-    const nodeId = params.nodes[0];
-    renderDetails(nodeId, cfg.details);
-    network.focus(nodeId, { scale: 1.2, animation: { duration: 350 } });
-  });
-}
-
-function renderEmptyDetails() {
-  detailsBodyEl.innerHTML = `
-    <div class="empty">
-      <div class="emptyIcon">⧉</div>
-      <div class="emptyText">
-        Click a node on the left.<br />
-        This panel explains what it is and how it connects.
-      </div>
+function clearDetails() {
+  DETAILS.innerHTML = `
+    <div class="detailsEmpty">
+      <div class="emptyIcon"></div>
+      <div class="emptyTitle">Click a node on the left.</div>
+      <div class="emptyText">This panel explains what it is and how it connects.</div>
     </div>
   `;
 }
 
-function renderDetails(nodeId, detailsMap) {
-  const d = detailsMap[nodeId];
+function showDetails(id) {
+  const d = DETAILS_TEXT[id];
   if (!d) {
-    detailsBodyEl.innerHTML = `
-      <div class="card">
-        <h2>${escapeHtml(nodeId)}</h2>
-        <div class="meta">No details found for this node.</div>
-      </div>
-    `;
+    DETAILS.innerHTML = `<div class="section"><div class="sectionTitle">No details</div><p>No description exists for this node yet.</p></div>`;
     return;
   }
 
-  const badges = (d.tags || []).map((t, i) => {
-    const cls = (d.tagStyle && d.tagStyle[i]) ? d.tagStyle[i] : "";
-    return `<span class="badge ${cls}">${escapeHtml(t)}</span>`;
-  }).join("");
+  const linkify = (s) => {
+    // turn Render/Netlify URLs into links if present in lines
+    if (typeof s !== "string") return "";
+    if (s.startsWith("http://") || s.startsWith("https://")) {
+      return `<a href="${s}" target="_blank" rel="noopener noreferrer">${s}</a>`;
+    }
+    // handle "Label: https://..."
+    const m = s.match(/^(.*?):\s*(https?:\/\/\S+)$/);
+    if (m) {
+      return `${m[1]}: <a href="${m[2]}" target="_blank" rel="noopener noreferrer">${m[2]}</a>`;
+    }
+    return escapeHtml(s);
+  };
 
-  const bullets = (d.bullets && d.bullets.length)
-    ? `<div class="section"><div class="sectionTitle">Key points</div><ul>${d.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join("")}</ul></div>`
-    : "";
+  DETAILS.innerHTML = `
+    <h2>${escapeHtml(d.title)}</h2>
+    <div class="tagRow">${(d.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>
 
-  const sections = [];
-  if (d.overview) sections.push(section("What it is", d.overview));
-  if (d.oneRow) sections.push(section("What one row means", d.oneRow));
-  if (d.keys) sections.push(section("Keys / identifiers", d.keys));
-  if (d.why) sections.push(section("Why it exists", d.why));
-  if (d.links) sections.push(section("How it links", d.links));
-  if (d.example) sections.push(section("Simple example", d.example));
-
-  detailsBodyEl.innerHTML = `
-    <div class="card">
-      <h2>${escapeHtml(d.title)}</h2>
-      <div class="meta"><b>Node ID:</b> <span class="codeInline">${escapeHtml(nodeId)}</span></div>
-      <div class="badgeRow">${badges}</div>
-      ${sections.join("")}
-      ${bullets}
-    </div>
-  `;
-}
-
-function section(title, text) {
-  return `
     <div class="section">
-      <div class="sectionTitle">${escapeHtml(title)}</div>
-      <div class="sectionText">${escapeHtml(text)}</div>
+      <div class="sectionTitle">What it is</div>
+      <ul>${(d.what || []).map(x => `<li>${linkify(x)}</li>`).join("")}</ul>
+    </div>
+
+    <div class="section">
+      <div class="sectionTitle">How it connects</div>
+      <ul>${(d.connects || []).map(x => `<li>${linkify(x)}</li>`).join("")}</ul>
+    </div>
+
+    <div class="section">
+      <div class="sectionTitle">Implementation notes</div>
+      <ul>${(d.implementation || []).map(x => `<li>${linkify(x)}</li>`).join("")}</ul>
     </div>
   `;
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, s => ({
-    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
-  }[s]));
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-/* -----------------------
-   Search
------------------------- */
+function render(mode) {
+  GRAPH_HOST.innerHTML = "";
 
-function findNode() {
-  const q = (searchInput.value || "").trim().toLowerCase();
-  if (!q || !network) return;
+  const width = GRAPH_HOST.clientWidth;
+  const height = GRAPH_HOST.clientHeight;
 
-  const cfg = GRAPHS[currentGraphKey]();
-  const nodes = cfg.nodes;
+  svg = d3.select(GRAPH_HOST)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height);
 
-  const hit = nodes.find(n =>
-    String(n.id).toLowerCase() === q ||
-    String(n.id).toLowerCase().includes(q) ||
-    String(n.label).toLowerCase().includes(q)
-  );
+  // arrow marker
+  svg.append("defs").append("marker")
+    .attr("id", "arrow")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 18)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "rgba(255,255,255,.25)");
 
-  if (!hit) {
-    detailsBodyEl.innerHTML = `
-      <div class="card">
-        <h2>Not found</h2>
-        <div class="meta">No node matched: <span class="codeInline">${escapeHtml(q)}</span></div>
-      </div>
-    `;
-    return;
+  gZoom = svg.append("g");
+
+  const zoom = d3.zoom()
+    .scaleExtent([0.35, 2.5])
+    .on("zoom", (e) => gZoom.attr("transform", e.transform));
+
+  svg.call(zoom);
+
+  const dataset = (mode === "pipeline") ? DATA.pipeline : DATA.erd;
+
+  const nodes = dataset.nodes.map(n => ({ ...n }));
+  const links = dataset.links.map(l => ({ ...l }));
+
+  // force simulation anchored to (x,y) targets for stable layout
+  sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id).distance(90).strength(0.7))
+    .force("charge", d3.forceManyBody().strength(-240))
+    .force("x", d3.forceX(d => d.x).strength(1.0))
+    .force("y", d3.forceY(d => d.y).strength(1.0))
+    .force("collide", d3.forceCollide(56))
+    .alpha(1)
+    .alphaDecay(0.08);
+
+  // links
+  const link = gZoom.append("g")
+    .selectAll("line")
+    .data(links)
+    .join("line")
+    .attr("class", d => d.dim ? "link linkDim" : "link")
+    .attr("marker-end", "url(#arrow)");
+
+  // node group
+  const node = gZoom.append("g")
+    .selectAll("g")
+    .data(nodes)
+    .join("g")
+    .attr("class", "node")
+    .call(drag(sim));
+
+  // rectangles
+  node.append("rect")
+    .attr("class", "node-rect")
+    .attr("rx", 10)
+    .attr("ry", 10)
+    .attr("width", 170)
+    .attr("height", 54)
+    .attr("x", -85)
+    .attr("y", -27)
+    .attr("fill", d => palette[d.kind] || "#cbd2d9");
+
+  // label
+  node.append("text")
+    .attr("class", "node-label")
+    .attr("text-anchor", "middle")
+    .attr("y", -6)
+    .text(d => d.label);
+
+  // sublabel (multi-line)
+  node.append("text")
+    .attr("class", "node-sub")
+    .attr("text-anchor", "middle")
+    .attr("y", 10)
+    .each(function(d){
+      const lines = (d.sub || "").split("\n").slice(0, 2);
+      const t = d3.select(this);
+      t.selectAll("tspan").remove();
+      lines.forEach((ln, i) => {
+        t.append("tspan")
+          .attr("x", 0)
+          .attr("dy", i === 0 ? 0 : 12)
+          .text(ln);
+      });
+    });
+
+  node.on("click", (e, d) => {
+    selectedId = d.id;
+    updateSelection();
+    showDetails(d.id);
+  });
+
+  sim.on("tick", () => {
+    link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+    node.attr("transform", d => `translate(${d.x},${d.y})`);
+  });
+
+  nodeSel = node;
+
+  // initial fit
+  setTimeout(() => zoomToFit(svg, gZoom, width, height), 30);
+  updateSelection();
+}
+
+function updateSelection() {
+  if (!nodeSel) return;
+  nodeSel.classed("nodeSelected", d => d.id === selectedId);
+  nodeSel.classed("pulse", d => d.id === selectedId);
+}
+
+function zoomToFit(svgSel, gSel, w, h) {
+  const bounds = gSel.node().getBBox();
+  const fullW = w;
+  const fullH = h;
+  const padding = 40;
+
+  const midX = bounds.x + bounds.width / 2;
+  const midY = bounds.y + bounds.height / 2;
+
+  const scale = Math.max(0.35, Math.min(2.2, 0.92 / Math.max(bounds.width / (fullW - padding), bounds.height / (fullH - padding))));
+  const translate = [fullW / 2 - scale * midX, fullH / 2 - scale * midY];
+
+  svgSel.transition()
+    .duration(300)
+    .call(d3.zoom().transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+}
+
+function drag(simulation) {
+  function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(0.15).restart();
+    d.fx = d.x;
+    d.fy = d.y;
   }
 
-  network.selectNodes([hit.id]);
-  network.focus(hit.id, { scale: 1.25, animation: { duration: 350 } });
-  renderDetails(hit.id, cfg.details);
+  function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+  }
+
+  function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    // keep nodes near their intended layout, but allow some manual movement
+    d.fx = null;
+    d.fy = null;
+  }
+
+  return d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended);
 }
 
-/* -----------------------
-   UI wiring
------------------------- */
+function findNode(query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return null;
 
-tabPipeline.addEventListener("click", () => renderGraph("pipeline"));
-tabErd.addEventListener("click", () => renderGraph("erd"));
-resetDetailsBtn.addEventListener("click", () => renderEmptyDetails());
-searchBtn.addEventListener("click", () => findNode());
+  const dataset = (currentMode === "pipeline") ? DATA.pipeline : DATA.erd;
+  const byId = dataset.nodes.find(n => n.id.toLowerCase() === q);
+  if (byId) return byId.id;
+
+  const byLabel = dataset.nodes.find(n => (n.label || "").toLowerCase().includes(q));
+  if (byLabel) return byLabel.id;
+
+  const bySub = dataset.nodes.find(n => (n.sub || "").toLowerCase().includes(q));
+  if (bySub) return bySub.id;
+
+  return null;
+}
+
+function focusNode(id) {
+  if (!nodeSel || !svg || !gZoom) return;
+
+  selectedId = id;
+  updateSelection();
+  showDetails(id);
+
+  // center view on selected node
+  const dataset = (currentMode === "pipeline") ? DATA.pipeline : DATA.erd;
+  const n = dataset.nodes.find(x => x.id === id);
+  if (!n) return;
+
+  const w = GRAPH_HOST.clientWidth;
+  const h = GRAPH_HOST.clientHeight;
+
+  const t = d3.zoomIdentity
+    .translate(w / 2 - n.x, h / 2 - n.y)
+    .scale(1.15);
+
+  svg.transition().duration(280).call(d3.zoom().transform, t);
+}
+
+function resetAll() {
+  selectedId = null;
+  updateSelection();
+  clearDetails();
+  const w = GRAPH_HOST.clientWidth;
+  const h = GRAPH_HOST.clientHeight;
+  zoomToFit(svg, gZoom, w, h);
+}
+
+// UI bindings
+tabPipeline.addEventListener("click", () => {
+  tabPipeline.classList.add("active");
+  tabERD.classList.remove("active");
+  tabPipeline.setAttribute("aria-selected", "true");
+  tabERD.setAttribute("aria-selected", "false");
+  graphTitle.textContent = "Pipeline Diagram";
+  setMode("pipeline");
+});
+
+tabERD.addEventListener("click", () => {
+  tabERD.classList.add("active");
+  tabPipeline.classList.remove("active");
+  tabERD.setAttribute("aria-selected", "true");
+  tabPipeline.setAttribute("aria-selected", "false");
+  graphTitle.textContent = "ERD Diagram";
+  setMode("erd");
+});
+
+btnFind.addEventListener("click", () => {
+  const id = findNode(searchInput.value);
+  if (!id) return;
+  focusNode(id);
+});
+
 searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") findNode();
+  if (e.key === "Enter") btnFind.click();
 });
 
-window.addEventListener("DOMContentLoaded", () => {
-  renderGraph("pipeline");
-});
+btnReset.addEventListener("click", resetAll);
+
+// initial render
+render("pipeline");
+clearDetails();
