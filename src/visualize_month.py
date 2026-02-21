@@ -18,11 +18,14 @@ def get_feature_cols(df: pd.DataFrame) -> list[str]:
         "count",
         "lag_1", "lag_2", "lag_3", "lag_6", "lag_12",
         "roll3_mean", "roll6_mean",
+        "nbr_lag1_mean", "nbr_lag1_sum", "nbr_lag1_max", "nbr_lag1_count",
     ]
     cols = [c for c in candidates if c in df.columns]
     if not cols:
-        raise ValueError("No usable feature columns found.")
+        raise ValueError("No usable feature columns found in dataset.")
     return cols
+
+
 
 
 def fit_predict_ridge(train: pd.DataFrame, test: pd.DataFrame, feature_cols: list[str]) -> np.ndarray:
