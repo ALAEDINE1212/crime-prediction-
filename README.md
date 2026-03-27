@@ -428,7 +428,7 @@ Group blog entries documenting sprint reflections are in `docs/group_blog/`.
 | Level | 5 (Year 2 undergraduate) |
 | Credit Value | 60 credits |
 | Module Leader | Dr Kulvinder Panesar |
-| University | University of Wolverhampton |
+| University | University of Bradford |
 | Assessment | Group Presentation and Live Demo (40%) + Individual Report (60%) |
 | Submission | Canvas and Presentation |
 
@@ -480,4 +480,4 @@ Dataset: data.police.uk, West Yorkshire Police, 2018-2024.
 
 ---
 
-*COS-5031-E Crime Prediction Group | West Yorkshire Police DSP Project | University of Wolverhampton | 2025-2026*
+*COS-5031-E Crime Prediction Group | West Yorkshire Police DSP Project | University of Bradford | 2025-2026*
