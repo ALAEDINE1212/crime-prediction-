@@ -474,7 +474,7 @@ If you use this work in academic research, please cite:
 
 ```
 Crime Hotspot Prediction System, COS-5031-E Group Project,
-University of Wolverhampton, 2025-2026.
+University of Bradford, 2025-2026.
 Dataset: data.police.uk, West Yorkshire Police, 2018-2024.
 ```
 
