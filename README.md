@@ -29,7 +29,7 @@
 
 ## 1. Project Overview
 
-This repository contains the full end-to-end pipeline for a **crime hotspot forecasting system** built for West Yorkshire Police as part of a multidisciplinary AI project at the University of Wolverhampton (COS-5031-E, Level 5, 60 credits).
+This repository contains the full end-to-end pipeline for a **crime hotspot forecasting system** built for West Yorkshire Police as part of a Discipline Specific AI project at the University of Bradford (COS-5031-E, Level 5, 60 credits).
 
 The system ingests publicly available crime data from [data.police.uk](https://data.police.uk), aggregates it onto a 500m spatial grid, engineers temporal and spatial features, and trains two families of models:
 
