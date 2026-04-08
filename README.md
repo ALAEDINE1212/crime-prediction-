@@ -183,7 +183,7 @@ crime-prediction-/
 
 ## 6. Pipeline Architecture
 
-![Pipeline Architecture](docs/pipeline_architecture.png)
+![Pipeline Architecture](Documents_dashboard/pipeline_architecture.png)
 
 ### Stage-by-stage description
 
