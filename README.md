@@ -29,7 +29,7 @@
 
 ## 1. Project Overview
 
-This repository contains the full end-to-end pipeline for a **crime hotspot forecasting system** built for West Yorkshire Police as part of a Discipline Specific AI project at the University of Bradford (COS-5031-E, Level 5, 60 credits).
+This repository contains the full end-to-end pipeline for a **crime hotspot forecasting system** built for West Yorkshire Police as part of a Discipline-Specific AI project at the University of Bradford (COS-5031-E, Level 5, 60 credits).
 
 The system ingests publicly available crime data from [data.police.uk](https://data.police.uk), aggregates it onto a 500m spatial grid, engineers temporal and spatial features, and trains two families of models:
 
@@ -37,6 +37,9 @@ The system ingests publicly available crime data from [data.police.uk](https://d
 - **CNN-GRU** (deep learning benchmark - higher accuracy, lower interpretability)
 
 The outputs are served via a **FastAPI backend** and a **Leaflet.js interactive map** that allows officers to query hotspot probability scores by grid cell, date range, and crime type.
+
+Live demo: [https://ourworkflow.netlify.app/crime-map/](https://ourworkflow.netlify.app/crime-map/)
+API: [https://crime-prediction-apii.onrender.com](https://crime-prediction-apii.onrender.com)
 
 ---
 
@@ -68,13 +71,14 @@ The outputs are served via a **FastAPI backend** and a **Leaflet.js interactive 
 | **Client** | West Yorkshire Police (DSP client project) |
 | **Module** | COS-5031-E Discipline-Specific AI Project |
 | **Module Leader** | Dr Kulvinder Panesar |
+| **Client Supervisor** | Dr Irfan Mehmood |
 | **Organisation (fictional)** | Future AI for ALL (FALL) |
-| **Project Manager** | Alaedine Ait bella |
+| **Project Manager** | Alaedine Ait Bella |
 | **Jira Board** | CP (Crime Prediction) |
 | **Methodology** | Agile (Scrum, sprint-based) |
 | **Sprints** | 5 sprints across 2 semesters |
-| **Group Submission Deadline** | Friday 3rd April 2026 by 12pm |
-| **Presentation Date** | Monday 6th April 2026 (D.1.03) |
+| **Group Canvas Submission Deadline** | Friday 17th April 2026 by 12pm |
+| **Client Presentation Date** | Monday 20th April 2026, Room D.1.03 |
 
 **Aims and Objectives:**
 
@@ -101,7 +105,7 @@ The outputs are served via a **FastAPI backend** and a **Leaflet.js interactive 
 
 **Source:** [https://data.police.uk](https://data.police.uk) (open licence)
 
-**Coverage:** January 2018 to January 2024, West Yorkshire
+**Coverage:** December 2022 to November 2025, West Yorkshire
 
 **Size:** 1,048,575 rows x 12 columns (.csv format)
 
@@ -128,7 +132,7 @@ The dataset is not included in this repository due to file size. To reproduce re
 
 1. Go to [https://data.police.uk/data/](https://data.police.uk/data/)
 2. Select **West Yorkshire** under "Forces"
-3. Select date range **January 2018 to January 2024**
+3. Select date range **December 2022 to November 2025**
 4. Click **Generate File** and download the archive
 5. Extract all `.csv` files into `data/raw/`
 
@@ -137,53 +141,41 @@ The dataset is not included in this repository due to file size. To reproduce re
 ## 5. Repository Structure
 
 ```
-crime-hotspot-prediction/
+crime-prediction-/
 │
-├── data/
-│   ├── raw/                    # Downloaded CSVs from data.police.uk (not committed)
-│   ├── processed/              # Cleaned dataset (crime_cleaned_v1.csv)
-│   └── grid/                   # 500m grid cells GeoJSON
+├── data/                            # Crime data (raw CSVs not committed due to size)
+│   ├── raw/                         # Downloaded street-level CSVs from data.police.uk
+│   └── processed/                   # Generated parquet files (cell_month_features, dim_cell)
 │
-├── notebooks/
-│   ├── 01_eda.ipynb            # Exploratory data analysis
-│   ├── 02_feature_engineering.ipynb
-│   ├── 03_baseline_models.ipynb
-│   ├── 04_advanced_models.ipynb
-│   └── 05_evaluation.ipynb
+├── src/                             # Core ML pipeline scripts
+│   ├── config.py                    # Shared configuration, paths, grid settings
+│   ├── utils.py                     # Shared utility functions (metrics, helpers)
+│   ├── make_dataset.py              # Load CSVs, snap to 500m grid, build lag features
+│   ├── make_month_panels.py         # Monthly panel construction per crime type
+│   ├── baseline.py                  # Lag-1 and Lag-12 naive baseline models
+│   ├── walk_forward.py              # Walk-forward validation loop (Ridge + baselines)
+│   ├── evaluate.py                  # Evaluation metrics (MAE, RMSE, NDCG@K, PAI, PEI)
+│   ├── train_cnn_gru.py             # CNN-GRU training script
+│   ├── dl_cnn_gru.py                # CNN-GRU model architecture definition
+│   ├── make_results_table.py        # Aggregate and format results table
+│   ├── plot_walk_forward.py         # Walk-forward validation plots
+│   ├── visualize_month.py           # Monthly heatmap visualisation
+│   ├── merge_socio.py               # ONS socio-economic data merge (future use)
+│   └── socio_ons.py                 # ONS deprivation data loader (future use)
 │
-├── src/
-│   ├── ingest.py               # Data loading and grid aggregation
-│   ├── features.py             # Feature engineering pipeline
-│   ├── models/
-│   │   ├── ridge.py            # Ridge regression model
-│   │   └── cnn_gru.py          # CNN-GRU deep learning model
-│   ├── evaluate.py             # Walk-forward validation
-│   └── visualise.py            # Heatmap and ranking plots
+├── crime-map/                       # Leaflet.js dashboard (deployed on Netlify)
 │
-├── api/
-│   ├── main.py                 # FastAPI application entry point
-│   ├── routes/
-│   │   ├── hotspots.py         # /hotspots endpoint
-│   │   └── query.py            # /query point endpoint
-│   └── schemas.py              # Pydantic data models
+├── crime_map_app/                   # Supporting frontend application files
 │
-├── dashboard/
-│   ├── index.html              # Leaflet.js map interface
-│   ├── app.js                  # Frontend logic
-│   └── style.css
+├── Documents_dashboard/             # Dashboard documentation and supporting assets
 │
-├── validation/
-│   └── wf_*.csv                # Walk-forward validation logs (retained for auditability)
+├── meetings/                        # Meeting notes, sprint retrospectives, minutes
 │
-├── docs/
-│   ├── PID.md                  # Project Initiation Document
-│   ├── ethical_toolkit.md      # FAST principles analysis
-│   ├── group_blog/             # Sprint blog entries
-│   └── risk_register.md
-│
-├── requirements.txt
-├── environment.yml             # Conda environment
-├── .gitignore
+├── index.html                       # Main dashboard entry point
+├── app.js                           # Frontend application logic
+├── styles.css                       # Stylesheet
+├── requirements.txt                 # Python dependencies
+├── crime_prediction_jira_backlog.xlsx  # Full Jira backlog export
 └── README.md
 ```
 
@@ -191,51 +183,56 @@ crime-hotspot-prediction/
 
 ## 6. Pipeline Architecture
 
-```
-data.police.uk CSVs
-        |
-        v
-  [ingest.py]
-  Load + merge monthly CSVs
-  Snap lat/lon to 500m grid cells
-        |
-        v
-  [features.py]
-  Date parsing (year, month fields)
-  Crime type standardisation + encoding
-  Lag features (1-month, 12-month)
-  Rolling mean (3-month window)
-  Grid-level aggregation
-        |
-        v
-  [models/ridge.py]          [models/cnn_gru.py]
-  Ridge Regression            CNN-GRU (seq2seq)
-  (primary / production)      (benchmark only)
-        |                           |
-        v                           v
-  [evaluate.py]
-  Walk-forward validation (monthly expanding window)
-  Regression metrics: MAE, RMSE, RMSLE, Poisson Deviance
-  Ranking metrics: Precision@K, Recall@K, NDCG@K, PAI, PEI
-  Logs saved to validation/wf_*.csv
-        |
-        v
-  [api/main.py]
-  FastAPI serving /hotspots and /query endpoints
-        |
-        v
-  [dashboard/index.html]
-  Leaflet.js interactive map
-  Adjustable top-% threshold
-  Point-query tool
-  Confidence score display (not binary verdicts)
-```
+![Pipeline Architecture](docs/pipeline_architecture.png)
+
+### Stage-by-stage description
+
+**Stage 1 - Data Ingestion (three input streams)**
+- Crime Incident Data: West Yorkshire Police monthly street-level CSVs (primary, required)
+- Outcomes Data: monthly outcomes CSVs (optional enrichment)
+- Stop and Search Data: monthly stop-and-search CSVs (optional enrichment)
+
+**Stage 2 - Data Pre-processing and Quality Gate**
+- Merge and concatenate monthly CSV files
+- Drop rows with null lat/lon or missing month
+- Apply UK bounding box sanity check (EPSG:4326)
+- Standardise crime type labels to lowercase
+- Output: clean, validated incident-level dataframe
+
+**Stage 3 - Spatial and Temporal Representation + Socio-Economic Indicators**
+- Snap lat/lon coordinates to 500m x 500m grid cells (EPSG:27700 British National Grid)
+- Aggregate incident counts per cell per month
+- Socio-Economic Indicators (ONS Open Data) planned for future version to reduce reporting bias
+
+**Stage 4 - Feature Engineering**
+- Lag features: lag-1, lag-2, lag-3, lag-6, lag-12 (months)
+- Rolling means: 3-month and 6-month windows (past-only, no leakage)
+- Neighbour features: 8-cell Moore adjacency aggregates (sum, mean, max of lag-1)
+- Output: `cell_month_features.parquet`
+
+**Stage 5 - Prediction Task (three model tracks)**
+
+| Track | Model | Status |
+|---|---|---|
+| Baseline | Naive lag-1 and seasonal lag-12 | Done |
+| ML Model | Ridge Regression (lags + rolling features) | Done - primary production model |
+| Graph Model | GNN / ST-GNN | Optional, planned for future work |
+
+**Stage 6 - Evaluation and Validation**
+- Walk-forward validation (monthly expanding window, 12 folds)
+- Regression metrics: MAE, RMSE
+- Ranking metrics: MAP, Precision@K, NDCG@K, PAI, PEI
+
+**Stage 7 - Decision Support Output**
+- Interactive Hotspot Map (Leaflet.js, deployed on Netlify)
+- Point-query tool: click any location to retrieve its hotspot score
+- Outputs scores and rankings, not binary verdicts
 
 ---
 
 ## 7. Models and Results
 
-All results are from walk-forward validation (expanding window, monthly step).
+All results are from walk-forward validation (expanding window, monthly step, 12 folds).
 
 ### 7.1 Regression Metrics (lower is better)
 
@@ -258,9 +255,10 @@ All results are from walk-forward validation (expanding window, monthly step).
 **Model selection rationale:**
 
 Ridge Regression is designated as the **primary production model** because:
+
 - Its coefficients are directly interpretable (required by ICO AI guidance for law enforcement AI)
-- It achieves the best ranking precision (Precision@K = 0.731)
-- Its outputs are legally defensible in a policing context
+- It achieves the best hotspot ranking precision (Precision@K = 0.731)
+- Its outputs are legally defensible in a policing context under UK GDPR Article 22
 
 CNN-GRU achieves lower MAE (2.041 vs 2.970) but is less interpretable. It is retained in the codebase as a benchmark and for future research use only.
 
@@ -277,47 +275,42 @@ CNN-GRU achieves lower MAE (2.041 vs 2.970) but is less interpretable. It is ret
 ### Environment setup
 
 ```bash
-# Using conda (recommended)
-conda env create -f environment.yml
-conda activate crime-hotspot
-
-# Or using pip
+# Using pip
 pip install -r requirements.txt
 ```
 
 ### Data preparation
 
+After downloading and placing CSVs in `data/raw/`:
+
 ```bash
-# After downloading and placing CSVs in data/raw/
-python src/ingest.py --input data/raw/ --output data/processed/crime_cleaned_v1.csv
+python src/make_dataset.py
+python src/make_month_panels.py
 ```
 
-### Feature engineering
+### Training and evaluation
 
 ```bash
-python src/features.py --input data/processed/crime_cleaned_v1.csv --output data/processed/features.parquet
-```
-
-### Training models
-
-```bash
-# Train Ridge regression (primary)
-python src/models/ridge.py --features data/processed/features.parquet --output models/ridge_model.pkl
+# Run baseline models
+python src/baseline.py
 
 # Train CNN-GRU (benchmark)
-python src/models/cnn_gru.py --features data/processed/features.parquet --output models/cnn_gru.pt
-```
+python src/train_cnn_gru.py
 
-### Evaluation
+# Run walk-forward validation
+python src/walk_forward.py
 
-```bash
-python src/evaluate.py --model ridge --output validation/
+# Generate results table
+python src/make_results_table.py
 ```
 
 ### Running the API
 
+The API is deployed on Render: [https://crime-prediction-apii.onrender.com](https://crime-prediction-apii.onrender.com)
+
+To run locally:
+
 ```bash
-cd api
 uvicorn main:app --reload --port 8000
 ```
 
@@ -325,7 +318,9 @@ API docs available at [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ### Running the dashboard
 
-Open `dashboard/index.html` in a browser with the API running on port 8000.
+Live at: [https://ourworkflow.netlify.app/crime-map/](https://ourworkflow.netlify.app/crime-map/)
+
+To run locally, open `index.html` in a browser with the API running on port 8000.
 
 ---
 
@@ -362,16 +357,14 @@ This project was formally reviewed against the **Alan Turing Institute FAST Prin
 | Principle | Key Risk | Mitigation |
 |---|---|---|
 | **Fairness** | Over-policed areas appear as hotspots due to police presence, not higher underlying crime rates. Model could amplify existing policing bias. | System is advisory only. No automated enforcement. Officers retain all decision-making authority. |
-| **Accountability** | Lack of audit trail could lead to untraceable decisions if model errors occur. | Walk-forward logs stored as `wf_*.csv`. Full pipeline open-sourced. All model choices documented. |
+| **Accountability** | Lack of audit trail could lead to untraceable decisions if model errors occur. | Walk-forward validation logs retained. Full pipeline open-sourced. All model choices documented. |
 | **Sustainability** | Self-fulfilling prophecy: more patrols in predicted areas increase recorded crime there, feeding back into training data. | Monthly rolling model refresh planned. ONS socio-economic indicators to be added as future structural features. |
-| **Transparency** | CNN-GRU is less interpretable than Ridge regression, limiting stakeholder trust and legal defensibility. | Ridge regression is the primary operational model. CNN-GRU reserved for benchmark comparison. Map displays scores, not binary verdicts. |
+| **Transparency** | CNN-GRU is less interpretable than Ridge Regression, limiting stakeholder trust and legal defensibility. | Ridge Regression is the primary operational model. CNN-GRU reserved for benchmark comparison only. Map displays scores, not binary verdicts. |
 
 **Legal compliance:**
 - UK GDPR Article 22: System is advisory only. A human officer must be in the loop for all deployment decisions.
-- ICO AI Guidance: Ridge regression coefficients are directly interpretable. Walk-forward results logged for auditability.
+- ICO AI Guidance: Ridge Regression coefficients are directly interpretable. Walk-forward results logged for auditability.
 - No individual-level PII stored or displayed at any stage. 500m grid cell size used to prevent re-identification.
-
-Full ethical toolkit analysis: [docs/ethical_toolkit.md](docs/ethical_toolkit.md)
 
 ---
 
@@ -398,13 +391,15 @@ Full Jira backlog export: `crime_prediction_jira_backlog.xlsx`
 
 | Milestone | Date |
 |---|---|
-| Project charter and PID created | Sprint 1 |
-| Dataset cleaned and EDA complete | Sprint 2 |
-| Baseline models trained and evaluated | Sprint 3 |
-| CNN-GRU and dashboard complete | Sprint 4 |
-| Ethics review and QA testing | Sprint 5 |
-| Group submission | Friday 3rd April 2026 |
-| Client presentation and live demo | Monday 6th April 2026 |
+| Project charter and PID created | October 2025 |
+| Dataset cleaned and EDA complete | November 2025 |
+| Baseline models trained and evaluated | December 2025 |
+| CNN-GRU and dashboard complete | February 2026 |
+| Ethics review and QA testing | March 2026 |
+| Group blog interim submission | 3rd April 2026 |
+| Group Canvas submission deadline | 17th April 2026 at 12pm |
+| Client presentation and live demo | 20th April 2026, Room D.1.03 |
+| Individual submissions (Element 2 and 3) | 24th April 2026 |
 
 ---
 
@@ -412,11 +407,11 @@ Full Jira backlog export: `crime_prediction_jira_backlog.xlsx`
 
 | Name | Role | Key Contributions |
 |---|---|---|
-| Alaedine Ait bella | Project Manager / Lead Engineer | Project charter, data pipeline, baseline and advanced modelling, dashboard, presentation |
-| Reyad Taha | Data Engineer | Missing data handling, ethical and privacy data screening, evaluation and ablation |
-| Pana Sharif | Frontend / API Developer | API and frontend deployment |
+| Alaedine Ait Bella | Project Manager / Lead ML Engineer | Project charter, data pipeline, baseline and advanced modelling, walk-forward validation, dashboard, ScrumMaster |
+| Reyad Taha | Data Engineer / Ethics Lead | Missing data handling, ethical and privacy data screening, evaluation and ablation |
+| Pana Sharif | Frontend / API Developer | FastAPI backend, Leaflet.js dashboard, Netlify deployment |
 
-Group blog entries documenting sprint reflections are in `docs/group_blog/`.
+Group blog entries documenting sprint reflections are committed to the repository under `meetings/`.
 
 ---
 
@@ -428,11 +423,12 @@ Group blog entries documenting sprint reflections are in `docs/group_blog/`.
 | Level | 5 (Year 2 undergraduate) |
 | Credit Value | 60 credits |
 | Module Leader | Dr Kulvinder Panesar |
+| Client Supervisor | Dr Irfan Mehmood |
 | University | University of Bradford |
-| Assessment | Group Presentation and Live Demo (40%) + Individual Report (60%) |
+| Assessment | Group Presentation and Live Demo (40%) + Individual Critical Reflection - Element 2 (1,300 words) + Individual Portfolio Report - Element 3 (10%) |
 | Submission | Canvas and Presentation |
 
-This project is submitted as part of Assignment 1 (Group Work, 40%) which covers:
+This project is submitted as part of the group work component (40%) which covers:
 - Project Initiation Document (PID)
 - Agile project management evidence
 - Development approach, architecture, and pipeline
@@ -464,8 +460,8 @@ If you want to apply this pipeline to a different UK police force area:
 
 1. Download the relevant force data from [data.police.uk](https://data.police.uk)
 2. Place CSVs in `data/raw/`
-3. Update the bounding box in `src/ingest.py` to match the new force area
-4. Rerun the full pipeline from `ingest.py` through to `evaluate.py`
+3. Update the bounding box in `src/make_dataset.py` to match the new force area
+4. Rerun the full pipeline from `make_dataset.py` through to `walk_forward.py`
 5. Retrain and re-evaluate before any deployment
 
 **Citation:**
@@ -475,7 +471,7 @@ If you use this work in academic research, please cite:
 ```
 Crime Hotspot Prediction System, COS-5031-E Group Project,
 University of Bradford, 2025-2026.
-Dataset: data.police.uk, West Yorkshire Police, 2018-2024.
+Dataset: data.police.uk, West Yorkshire Police, 2022-2025.
 ```
 
 ---
