@@ -185,6 +185,9 @@ crime-prediction-/
 
 ![Pipeline Architecture](Documents_dashboard/pipeline_architecture.png)
 
+
+FOR further details about pipelines follow this link: https://ourworkflow.netlify.app/
+
 ### Stage-by-stage description
 
 **Stage 1 - Data Ingestion (three input streams)**
