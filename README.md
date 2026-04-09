@@ -183,7 +183,10 @@ crime-prediction-/
 
 ## 6. Pipeline Architecture
 
-![Pipeline Architecture](docs/pipeline_architecture.png)
+![Pipeline Architecture](Documents_dashboard/pipeline_architecture.png)
+
+
+FOR further details about pipelines follow this link: https://ourworkflow.netlify.app/
 
 ### Stage-by-stage description
 
