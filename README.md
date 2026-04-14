@@ -385,7 +385,7 @@ This project was managed using Agile Scrum methodology with 5 sprints across two
 | Advanced Modelling | CP-40 | Done |
 | Evaluation and Ablation | CP-53 | Done |
 | API and Frontend Deployment | CP-66 | Done |
-| Demo and Reporting | CP-76 | In Progress |
+| Demo and Reporting | CP-76 | Done |
 | Reflection and Wrap-Up | CP-77 | In Progress |
 
 Full Jira backlog export: `crime_prediction_jira_backlog.xlsx`
